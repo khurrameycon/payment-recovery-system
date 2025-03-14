@@ -23,18 +23,8 @@ class TransactionController {
     }
     
     public function fetchFromNmi() {
-        // Set default date range to last 7 days
-        $endDate = date('Y-m-d');
-        $startDate = date('Y-m-d', strtotime('-7 days'));
-        
-        // Allow custom date range from POST
-        if (isset($_POST['start_date']) && isset($_POST['end_date'])) {
-            $startDate = $_POST['start_date'];
-            $endDate = $_POST['end_date'];
-        }
-        
-        // Fetch failed transactions from NMI
-        $result = $this->nmiService->getFailedTransactions($startDate, $endDate);
+        // Fetch failed transactions from NMI without date constraints
+        $result = $this->nmiService->getFailedTransactions();
         
         if (isset($result['error'])) {
             // Handle error
@@ -46,19 +36,28 @@ class TransactionController {
         // Process and save transactions
         $savedCount = 0;
         foreach ($result['transactions'] as $transaction) {
+            // Skip transactions with no email
+            if (empty($transaction['email'])) {
+                error_log("Skipping transaction {$transaction['transaction_id']} due to missing email");
+                continue;
+            }
+            
             // Find or create customer
             $customerId = $this->customerModel->findOrCreate(
                 $transaction['email'], 
                 $transaction['phone'] ?? null
             );
             
+            // Use a default date if missing
+            $date = !empty($transaction['date']) ? $transaction['date'] : date('Y-m-d H:i:s');
+            
             // Save transaction
             if ($this->transactionModel->saveFailedTransaction(
                 $customerId,
                 $transaction['transaction_id'],
                 $transaction['amount'],
-                $transaction['reason'],
-                $transaction['date']
+                $transaction['reason'] ?: 'Unknown',
+                $date
             )) {
                 $savedCount++;
             }
@@ -99,6 +98,102 @@ class TransactionController {
         // Redirect to transaction list
         header('Location: index.php?route=failed-transactions');
         exit;
+    }
+
+    public function viewTransaction() {
+        // Get transaction ID from request
+        $transactionId = $_GET['id'] ?? 0;
+        
+        if (!$transactionId) {
+            $_SESSION['error'] = "No transaction specified";
+            header('Location: index.php?route=failed-transactions');
+            exit;
+        }
+        
+        // Get transaction details
+        $transaction = $this->transactionModel->getTransactionById($transactionId);
+        
+        if (!$transaction) {
+            $_SESSION['error'] = "Transaction not found";
+            header('Location: index.php?route=failed-transactions');
+            exit;
+        }
+        
+        // Get customer details
+        $customer = $this->customerModel->getById($transaction['customer_id']);
+        
+        // Get recovery links
+        $recoveryLink = $this->transactionModel->getRecoveryLink($transactionId);
+        
+        // Get communication history
+        $communications = $this->transactionModel->getCommunicationHistory($transactionId);
+        
+        // Load view
+        include BASE_PATH . '/app/views/view_transaction.php';
+    }
+
+    /**
+ * Get recovery link for a transaction
+ */
+    public function getRecoveryLink($transactionId) {
+        $stmt = $this->db->prepare("SELECT * FROM payment_recovery WHERE transaction_id = ?");
+        $stmt->bind_param("i", $transactionId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows > 0) {
+            return $result->fetch_assoc();
+        }
+        
+        return null;
+    }
+
+    /**
+     * Get communication history for a transaction
+     */
+    public function getCommunicationHistory($transactionId) {
+        $stmt = $this->db->prepare("SELECT * FROM communication_attempts WHERE transaction_id = ? ORDER BY created_at DESC");
+        $stmt->bind_param("i", $transactionId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $history = [];
+        while ($row = $result->fetch_assoc()) {
+            $history[] = $row;
+        }
+        
+        return $history;
+    }
+
+    public function testSpecificTransaction() {
+        $transactionId = '10508482027'; // Use a real failed transaction ID from your NMI dashboard
+        $result = $this->nmiService->getSpecificTransaction($transactionId);
+        
+        echo "<pre>";
+        print_r($result);
+        echo "</pre>";
+    }
+
+
+    public function testTransaction() {
+        // Test with a known failed transaction ID from your screenshot
+        $transactionId = '10508510583'; // One of your failed transactions
+        
+        $result = $this->nmiService->getTransactionById($transactionId);
+        
+        echo "<h1>Test Transaction Fetch</h1>";
+        echo "<pre>";
+        print_r($result);
+        echo "</pre>";
+        
+        echo "<h1>Get All Failed Transactions</h1>";
+        // Try with a date range
+        $startDate = '2025-03-14';
+        $endDate = '2025-03-15';
+        $allResults = $this->nmiService->getFailedTransactions($startDate, $endDate);
+        echo "<pre>";
+        print_r($allResults);
+        echo "</pre>";
     }
 }
 ?>

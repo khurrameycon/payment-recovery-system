@@ -17,6 +17,24 @@ require_once BASE_PATH . '/config/api.php';
 $route = $_GET['route'] ?? 'home';
 
 switch ($route) {
+    case 'login':
+        require_once BASE_PATH . '/app/controllers/AuthController.php';
+        $controller = new AuthController();
+        $controller->showLogin();
+        break;
+    
+    case 'process-login':
+        require_once BASE_PATH . '/app/controllers/AuthController.php';
+        $controller = new AuthController();
+        $controller->processLogin();
+        break;
+    
+    case 'logout':
+        require_once BASE_PATH . '/app/controllers/AuthController.php';
+        $controller = new AuthController();
+        $controller->logout();
+        break;
+
     case 'home':
         require_once BASE_PATH . '/app/controllers/HomeController.php';
         $controller = new HomeController();
@@ -78,18 +96,39 @@ switch ($route) {
         break;
     
     // Add these cases to your switch statement
-case 'dashboard':
-    require_once BASE_PATH . '/app/controllers/ReportController.php';
-    $controller = new ReportController();
-    $controller->dashboard();
-    break;
+    case 'dashboard':
+        require_once BASE_PATH . '/app/controllers/ReportController.php';
+        $controller = new ReportController();
+        $controller->dashboard();
+        break;
 
-case 'reminder-report':
-    require_once BASE_PATH . '/app/controllers/ReportController.php';
-    $controller = new ReportController();
-    $controller->reminderReport();
-    break;
+    case 'reminder-report':
+        require_once BASE_PATH . '/app/controllers/ReportController.php';
+        $controller = new ReportController();
+        $controller->reminderReport();
+        break;
     
+    case 'view-transaction':
+        require_once BASE_PATH . '/app/controllers/TransactionController.php';
+        $controller = new TransactionController();
+        $controller->viewTransaction();
+        break;
+    
+    case 'advanced-analytics':
+        require_once BASE_PATH . '/app/controllers/ReportController.php';
+        $controller = new ReportController();
+        $controller->advancedAnalytics();
+        break;
+    
+
+    case 'test-transaction':
+        require_once BASE_PATH . '/app/controllers/TransactionController.php';
+        $controller = new TransactionController();
+        $controller->testSpecificTransaction();
+        break;
+    
+        
+    // Default route
     default:
         echo "404 - Not Found";
         break;

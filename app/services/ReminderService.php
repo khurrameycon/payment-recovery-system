@@ -115,38 +115,6 @@ class ReminderService {
         return $sent;
     }
     
-    /**
-     * Send email reminder
-     */
-    private function sendEmailReminder($reminder) {
-        // In a real implementation, this would use PHPMailer or another email library
-        // For now, we'll just simulate sending
-        
-        // Get email template
-        $template = $this->getEmailTemplate($reminder['message_template']);
-        
-        // Replace placeholders
-        $amount = number_format($reminder['amount'], 2);
-        $body = str_replace(
-            ['{{AMOUNT}}', '{{PAYMENT_LINK}}', '{{TRACKING_ID}}'],
-            [$amount, $reminder['recovery_link'] . '&track=' . $reminder['tracking_id'], $reminder['tracking_id']],
-            $template['body']
-        );
-        
-        $subject = str_replace(
-            ['{{AMOUNT}}'],
-            [$amount],
-            $template['subject']
-        );
-        
-        // Log email for development
-        error_log("EMAIL TO: {$reminder['email']}, SUBJECT: {$subject}");
-        error_log("BODY: {$body}");
-        
-        // In production, you would send the actual email here
-        
-        return true;
-    }
     
     /**
      * Send SMS reminder
@@ -218,6 +186,138 @@ class ReminderService {
         // In a real implementation, this would use Bitly API
         // For now, we'll just return a fake shortened URL
         return 'https://bit.ly/' . substr(md5($url), 0, 7);
+    }
+
+    public function determineOptimalSendTime($customerId) {
+        // Get customer timezone
+        $customer = $this->customerModel->getById($customerId);
+        $timezone = $customer['timezone'] ?: 'UTC';
+        
+        // Create datetime object in customer's timezone
+        $now = new DateTime('now', new DateTimeZone($timezone));
+        $hour = (int)$now->format('H');
+        $dayOfWeek = (int)$now->format('N'); // 1 (Monday) to 7 (Sunday)
+        
+        // Check if current time is within business hours (9am-5pm, Monday-Friday)
+        $isBusinessHours = ($hour >= 9 && $hour < 17) && ($dayOfWeek <= 5);
+        
+        // If outside business hours, schedule for next business hour
+        if (!$isBusinessHours) {
+            if ($hour >= 17 || $dayOfWeek > 5) {
+                // After business hours or weekend - schedule for 10am next business day
+                $now->setTime(10, 0, 0);
+                
+                if ($dayOfWeek == 6) { // Saturday
+                    $now->modify('+2 days'); // Schedule for Monday
+                } else if ($dayOfWeek == 7) { // Sunday
+                    $now->modify('+1 day'); // Schedule for Monday
+                } else if ($hour >= 17) { // After hours on weekday
+                    $now->modify('+1 day'); // Schedule for tomorrow
+                }
+            } else if ($hour < 9) {
+                // Early morning - schedule for 10am same day
+                $now->setTime(10, 0, 0);
+            }
+        }
+        
+        return $now;
+    }
+
+
+    // Add to app/services/ReminderService.php
+    public function determineOptimalChannel($customerId, $transactionId) {
+        // Get customer info
+        $customer = $this->customerModel->getById($customerId);
+        
+        // Get previous communication history
+        $stmt = $this->db->prepare("
+            SELECT channel, status, COUNT(*) as count
+            FROM communication_attempts
+            WHERE transaction_id IN (
+                SELECT id FROM failed_transactions WHERE customer_id = ?
+            )
+            GROUP BY channel, status
+        ");
+        $stmt->bind_param("i", $customerId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        $channelStats = [
+            'email' => ['sent' => 0, 'opened' => 0, 'clicked' => 0],
+            'sms' => ['sent' => 0, 'opened' => 0, 'clicked' => 0]
+        ];
+        
+        while ($row = $result->fetch_assoc()) {
+            $channelStats[$row['channel']][$row['status']] = $row['count'];
+        }
+        
+        // Calculate success rates
+        $emailSuccess = 0;
+        $smsSuccess = 0;
+        
+        if ($channelStats['email']['sent'] > 0) {
+            $emailSuccess = ($channelStats['email']['opened'] + $channelStats['email']['clicked']) / $channelStats['email']['sent'];
+        }
+        
+        if ($channelStats['sms']['sent'] > 0) {
+            $smsSuccess = ($channelStats['sms']['opened'] + $channelStats['sms']['clicked']) / $channelStats['sms']['sent'];
+        }
+        
+        // Get customer segment
+        $segment = $customer['segment'] ?: 'standard';
+        
+        // Choose channel based on success rate, segment and availability
+        if ($segment == 'premium') {
+            // Premium customers get both channels
+            return ['email', 'sms'];
+        } else if (!empty($customer['email']) && !empty($customer['phone'])) {
+            // We have both, choose the more successful one
+            return $emailSuccess >= $smsSuccess ? 'email' : 'sms';
+        } else if (!empty($customer['email'])) {
+            return 'email';
+        } else if (!empty($customer['phone'])) {
+            return 'sms';
+        }
+        
+        // Default fallback
+        return 'email';
+    }
+
+    private function sendEmailReminder($reminder) {
+        // Get email template
+        $template = $this->getEmailTemplate($reminder['message_template']);
+        
+        // Replace placeholders
+        $amount = number_format($reminder['amount'], 2);
+        $body = str_replace(
+            ['{{AMOUNT}}', '{{PAYMENT_LINK}}', '{{TRACKING_ID}}'],
+            [$amount, $reminder['recovery_link'] . '&track=' . $reminder['tracking_id'], $reminder['tracking_id']],
+            $template['body']
+        );
+        
+        $subject = str_replace(
+            ['{{AMOUNT}}'],
+            [$amount],
+            $template['subject']
+        );
+        
+        // Set headers
+        $headers = 'MIME-Version: 1.0' . "\r\n";
+        $headers .= 'Content-type: text/html; charset=UTF-8' . "\r\n";
+        $headers .= 'From: Payment Recovery <recovery@yourdomain.com>' . "\r\n";
+        
+        // Add tracking pixel for opens
+        $trackingPixel = '<img src="http://localhost/payment-recovery/public/index.php?route=track-open&id=' . 
+                         $reminder['tracking_id'] . '" width="1" height="1" alt="">';
+        $body .= $trackingPixel;
+        
+        // Send email
+        $success = mail($reminder['email'], $subject, $body, $headers);
+        
+        // Log sending attempt
+        error_log("Email to {$reminder['email']}, Subject: {$subject}, Success: " . ($success ? 'Yes' : 'No'));
+        
+        return $success;
     }
 }
 ?>

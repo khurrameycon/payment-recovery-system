@@ -147,5 +147,77 @@ class ReportController {
         
         return $stats;
     }
+
+
+
+    // Add to app/controllers/ReportController.php
+public function advancedAnalytics() {
+    // Get recovery rate by channel
+    $channelRecoveryRates = $this->getRecoveryRatesByChannel();
+    
+    // Get recovery rate by time of day
+    $timeOfDayStats = $this->getRecoveryRatesByTimeOfDay();
+    
+    // Get recovery rate by day of week
+    $dayOfWeekStats = $this->getRecoveryRatesByDayOfWeek();
+    
+    // Get average time to recovery
+    $avgTimeToRecovery = $this->getAverageTimeToRecovery();
+    
+    // Get recovery rate by customer segment
+    $segmentStats = $this->getRecoveryRatesBySegment();
+    
+    include BASE_PATH . '/app/views/advanced_analytics.php';
 }
+
+private function getRecoveryRatesByTimeOfDay() {
+    $sql = "
+        SELECT 
+            HOUR(ca.sent_at) as hour_of_day,
+            COUNT(DISTINCT ca.transaction_id) as total_sent,
+            SUM(CASE WHEN ft.recovery_status = 'recovered' THEN 1 ELSE 0 END) as recovered
+        FROM communication_attempts ca
+        JOIN failed_transactions ft ON ca.transaction_id = ft.id
+        WHERE ca.status != 'scheduled'
+        GROUP BY HOUR(ca.sent_at)
+        ORDER BY HOUR(ca.sent_at)
+    ";
+    
+    $result = $this->db->query($sql);
+    $stats = [];
+    
+    while ($row = $result->fetch_assoc()) {
+        $row['recovery_rate'] = $row['total_sent'] > 0 ? 
+            round(($row['recovered'] / $row['total_sent']) * 100, 2) : 0;
+        $stats[] = $row;
+    }
+    
+    return $stats;
+}
+
+private function getRecoveryRatesBySegment() {
+    $sql = "
+        SELECT 
+            c.segment,
+            COUNT(DISTINCT ft.id) as total_transactions,
+            SUM(CASE WHEN ft.recovery_status = 'recovered' THEN 1 ELSE 0 END) as recovered
+        FROM failed_transactions ft
+        JOIN customers c ON ft.customer_id = c.id
+        GROUP BY c.segment
+    ";
+    
+    $result = $this->db->query($sql);
+    $stats = [];
+    
+    while ($row = $result->fetch_assoc()) {
+        $row['recovery_rate'] = $row['total_transactions'] > 0 ? 
+            round(($row['recovered'] / $row['total_transactions']) * 100, 2) : 0;
+        $stats[] = $row;
+    }
+    
+    return $stats;
+}
+}
+
+
 ?>

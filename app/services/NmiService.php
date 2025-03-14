@@ -11,13 +11,12 @@ class NmiService {
     /**
      * Fetch failed transactions from NMI
      */
-    public function getFailedTransactions($startDate, $endDate) {
-        // Prepare API request
+    public function getFailedTransactions($startDate = null, $endDate = null) {
+        // Prepare API request without date constraints
         $postData = [
             'security_key' => $this->apiKey,
-            'condition' => 'status=declined',
-            'start_date' => $startDate,
-            'end_date' => $endDate
+            'report_type' => 'transaction',
+            'condition' => 'status=failed'
         ];
         
         // Make API request using cURL
@@ -29,43 +28,130 @@ class NmiService {
         $response = curl_exec($ch);
         
         if (curl_errno($ch)) {
-            // Handle error
             return ['error' => curl_error($ch)];
         }
         
         curl_close($ch);
         
-        // Parse and return response
-        // This is a simplified example - actual NMI response would need proper parsing
-        return $this->parseResponse($response);
+        // Parse and filter for failed transactions only
+        $result = $this->parseXmlResponse($response);
+        
+        // If we get no results with condition, try without it
+        if (empty($result['transactions'])) {
+            $postData = [
+                'security_key' => $this->apiKey,
+                'report_type' => 'transaction'
+            ];
+            
+            $ch = curl_init($this->apiUrl);
+            curl_setopt($ch, CURLOPT_POST, 1);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            
+            $response = curl_exec($ch);
+            
+            if (curl_errno($ch)) {
+                return ['error' => curl_error($ch)];
+            }
+            
+            curl_close($ch);
+            
+            // Parse and filter for failed transactions only
+            $result = $this->parseXmlResponse($response);
+        }
+        
+        return $result;
     }
     
-    /**
-     * Parse NMI API response
-     */
-    private function parseResponse($response) {
-        // In a real implementation, this would properly parse the XML or JSON response
-        // For now, we'll return a dummy structure
-        return [
-            'transactions' => [
-                [
-                    'transaction_id' => 'nmi_123456',
-                    'amount' => 99.99,
-                    'email' => 'customer@example.com',
-                    'phone' => '1234567890',
-                    'date' => '2023-01-15 14:30:00',
-                    'reason' => 'insufficient_funds'
-                ],
-                [
-                    'transaction_id' => 'nmi_123457',
-                    'amount' => 149.99,
-                    'email' => 'another@example.com',
-                    'phone' => '9876543210',
-                    'date' => '2023-01-15 15:45:00',
-                    'reason' => 'card_declined'
-                ]
-            ]
+    private function parseXmlResponse($xmlResponse) {
+        $transactions = [];
+        
+        // Create SimpleXML object from response
+        try {
+            $xml = new SimpleXMLElement($xmlResponse);
+            
+            // Check if we have transaction data
+            if (isset($xml->transaction)) {
+                foreach ($xml->transaction as $transaction) {
+                    // Get all fields from the transaction
+                    $transData = [
+                        'transaction_id' => isset($transaction->transaction_id) ? (string)$transaction->transaction_id : '',
+                        'amount' => isset($transaction->amount) ? (float)$transaction->amount : 0,
+                        'email' => isset($transaction->email) ? (string)$transaction->email : '',
+                        'phone' => isset($transaction->phone) ? (string)$transaction->phone : '',
+                        'date' => isset($transaction->date) ? (string)$transaction->date : '',
+                        'status' => isset($transaction->status) ? (string)$transaction->status : 'failed',
+                        'reason' => isset($transaction->condition) ? (string)$transaction->condition : 'failed',
+                        'first_name' => isset($transaction->first_name) ? (string)$transaction->first_name : '',
+                        'last_name' => isset($transaction->last_name) ? (string)$transaction->last_name : '',
+                        'customer' => isset($transaction->customer) ? (string)$transaction->customer : ''
+                    ];
+                    
+                    // Only add failed transactions to our result
+                    if (strtolower($transData['status']) == 'failed') {
+                        $transactions[] = $transData;
+                    }
+                }
+            }
+            
+            return ['transactions' => $transactions];
+        } catch (Exception $e) {
+            error_log("XML Parsing Error: " . $e->getMessage());
+            return ['error' => 'Failed to parse XML response: ' . $e->getMessage()];
+        }
+    }
+
+    public function getTransactionById($transactionId) {
+        $postData = [
+            'security_key' => $this->apiKey,
+            'report_type' => 'transaction',
+            'transaction_id' => $transactionId
         ];
+        
+        error_log("NMI API Request for transaction " . $transactionId . ": " . json_encode($postData));
+        
+        $ch = curl_init($this->apiUrl);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        
+        $response = curl_exec($ch);
+        
+        error_log("NMI API Response for transaction " . $transactionId . " (first 100 chars): " . substr($response, 0, 100));
+        
+        if (curl_errno($ch)) {
+            return ['error' => curl_error($ch)];
+        }
+        
+        curl_close($ch);
+        
+        return $this->parseXmlResponse($response);
+    }
+
+    public function getSpecificTransaction($transactionId) {
+        $postData = [
+            'security_key' => $this->apiKey,
+            'report_type' => 'transaction',
+            'transaction_id' => $transactionId
+        ];
+        
+        error_log("NMI API Request for Specific Transaction: " . json_encode($postData));
+        
+        $ch = curl_init($this->apiUrl);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        
+        $response = curl_exec($ch);
+        error_log("NMI API Response for Specific Transaction: " . $response);
+        
+        if (curl_errno($ch)) {
+            return ['error' => curl_error($ch)];
+        }
+        
+        curl_close($ch);
+        
+        return $this->parseXmlResponse($response);
     }
 }
 ?>
