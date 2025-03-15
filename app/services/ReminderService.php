@@ -79,42 +79,114 @@ class ReminderService {
      * Send scheduled reminders
      */
     public function sendScheduledReminders() {
-        // Get all scheduled reminders that are due
-        $sql = "SELECT ca.*, ft.amount, ft.transaction_reference, c.email, c.phone, pr.recovery_link 
-                FROM communication_attempts ca
-                JOIN failed_transactions ft ON ca.transaction_id = ft.id
-                JOIN customers c ON ft.customer_id = c.id
-                JOIN payment_recovery pr ON ft.id = pr.transaction_id
-                WHERE ca.status = 'scheduled' 
-                AND ca.scheduled_at <= NOW()
-                AND pr.status = 'active'";
-        
-        $result = $this->db->query($sql);
-        $sent = 0;
-        
-        while ($reminder = $result->fetch_assoc()) {
-            $success = false;
+        // Log the start of the process
+        error_log("Starting scheduled reminders process at " . date('Y-m-d H:i:s'));
             
-            if ($reminder['channel'] == 'email') {
-                $success = $this->sendEmailReminder($reminder);
-            } elseif ($reminder['channel'] == 'sms') {
-                $success = $this->sendSmsReminder($reminder);
-            }
-            
-            if ($success) {
-                // Update status to sent
-                $stmt = $this->db->prepare("UPDATE communication_attempts 
-                                           SET status = 'sent', sent_at = NOW() 
-                                           WHERE id = ?");
-                $stmt->bind_param("i", $reminder['id']);
-                $stmt->execute();
-                $sent++;
+        // First, let's debug what scheduled reminders we have
+        $debugSql = "SELECT ca.id, ca.transaction_id, ca.scheduled_at, ca.channel, ca.status, 
+                        ft.transaction_reference, c.email 
+                    FROM communication_attempts ca 
+                    JOIN failed_transactions ft ON ca.transaction_id = ft.id 
+                    JOIN customers c ON ft.customer_id = c.id 
+                    WHERE ca.status = 'scheduled'";
+                    
+        $debugResult = $this->db->query($debugSql);
+    
+        if ($debugResult) {
+            error_log("Scheduled reminders details:");
+            while ($row = $debugResult->fetch_assoc()) {
+                $scheduledTime = $row['scheduled_at'];
+                $currentTime = date('Y-m-d H:i:s');
+                $isPastDue = strtotime($scheduledTime) <= strtotime($currentTime) ? 'YES' : 'NO';
+                
+                error_log("ID: {$row['id']}, Transaction: {$row['transaction_id']}, " .
+                        "Email: {$row['email']}, Channel: {$row['channel']}, " .
+                        "Scheduled: {$scheduledTime}, Current: {$currentTime}, " .
+                        "Past Due: {$isPastDue}");
             }
         }
         
+        // Now get the actual reminders to process with all required fields
+        $sql = "SELECT ca.*, ft.amount, ft.transaction_reference, c.email, c.phone, 
+                      IFNULL(pr.recovery_link, 'http://localhost/payment-recovery/public/index.php?route=failed-transactions') as recovery_link,
+                      IFNULL(pr.recovery_token, 'placeholder') as recovery_token 
+                FROM communication_attempts ca
+                JOIN failed_transactions ft ON ca.transaction_id = ft.id
+                JOIN customers c ON ft.customer_id = c.id
+                LEFT JOIN payment_recovery pr ON ft.id = pr.transaction_id
+                WHERE ca.status = 'scheduled' 
+                AND ca.scheduled_at <= NOW()
+                LIMIT 20";
+        
+        error_log("Executing query: " . $sql);
+        
+        $result = $this->db->query($sql);
+        
+        if (!$result) {
+            error_log("Database error: " . $this->db->error);
+            return 0;
+        }
+        
+        $reminderCount = $result->num_rows;
+        error_log("Found {$reminderCount} reminders to process");
+        
+        if ($reminderCount == 0) {
+            error_log("No reminders to process. Check if any are scheduled.");
+            // For debugging, let's check how many scheduled reminders exist total
+            $checkSql = "SELECT COUNT(*) as count FROM communication_attempts WHERE status = 'scheduled'";
+            $checkResult = $this->db->query($checkSql);
+            if ($checkResult && $row = $checkResult->fetch_assoc()) {
+                error_log("Total scheduled reminders in database: " . $row['count']);
+            }
+            
+            // Also check if recovery links exist
+            $recoveryLinksSql = "SELECT COUNT(*) as count FROM payment_recovery WHERE status = 'active'";
+            $recoveryResult = $this->db->query($recoveryLinksSql);
+            if ($recoveryResult && $row = $recoveryResult->fetch_assoc()) {
+                error_log("Active recovery links in database: " . $row['count']);
+            }
+        }
+        
+        $sent = 0;
+        
+        while ($reminder = $result->fetch_assoc()) {
+            error_log("Processing reminder ID: {$reminder['id']}, Channel: {$reminder['channel']}, Transaction: {$reminder['transaction_id']}");
+            $success = false;
+            
+            try {
+                if ($reminder['channel'] == 'email') {
+                    $success = $this->sendEmailReminder($reminder);
+                } elseif ($reminder['channel'] == 'sms') {
+                    $success = $this->sendSmsReminder($reminder);
+                } else {
+                    error_log("Unknown channel: {$reminder['channel']} for reminder ID: {$reminder['id']}");
+                }
+                
+                if ($success) {
+                    // Update status to sent
+                    $stmt = $this->db->prepare("UPDATE communication_attempts 
+                                               SET status = 'sent', sent_at = NOW() 
+                                               WHERE id = ?");
+                    $stmt->bind_param("i", $reminder['id']);
+                    $stmt->execute();
+                    
+                    if ($stmt->affected_rows > 0) {
+                        $sent++;
+                        error_log("Successfully updated reminder ID: {$reminder['id']} to sent status");
+                    } else {
+                        error_log("Failed to update status for reminder ID: {$reminder['id']}");
+                    }
+                } else {
+                    error_log("Failed to send reminder ID: {$reminder['id']}");
+                }
+            } catch (Exception $e) {
+                error_log("Error processing reminder ID {$reminder['id']}: " . $e->getMessage());
+            }
+        }
+        
+        error_log("Completed sending reminders at " . date('Y-m-d H:i:s') . ". Sent: {$sent} of {$reminderCount}");
         return $sent;
     }
-    
     
     /**
      * Send SMS reminder
@@ -301,23 +373,17 @@ class ReminderService {
             $template['subject']
         );
         
-        // Set headers
-        $headers = 'MIME-Version: 1.0' . "\r\n";
-        $headers .= 'Content-type: text/html; charset=UTF-8' . "\r\n";
-        $headers .= 'From: Payment Recovery <recovery@yourdomain.com>' . "\r\n";
+        // Log detailed email information for testing
+        error_log("=== TEST EMAIL ===");
+        error_log("TO: {$reminder['email']}");
+        error_log("SUBJECT: {$subject}");
+        error_log("BODY: " . $body);
+        error_log("TRACKING ID: {$reminder['tracking_id']}");
+        error_log("RECOVERY LINK: {$reminder['recovery_link']}&track={$reminder['tracking_id']}");
+        error_log("==================");
         
-        // Add tracking pixel for opens
-        $trackingPixel = '<img src="http://localhost/payment-recovery/public/index.php?route=track-open&id=' . 
-                         $reminder['tracking_id'] . '" width="1" height="1" alt="">';
-        $body .= $trackingPixel;
-        
-        // Send email
-        $success = mail($reminder['email'], $subject, $body, $headers);
-        
-        // Log sending attempt
-        error_log("Email to {$reminder['email']}, Subject: {$subject}, Success: " . ($success ? 'Yes' : 'No'));
-        
-        return $success;
+        // Return success - don't update the status here, let the calling function do it
+        return true;
     }
 }
 ?>

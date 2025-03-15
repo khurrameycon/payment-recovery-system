@@ -127,7 +127,12 @@ switch ($route) {
         $controller->testSpecificTransaction();
         break;
     
-        
+    
+    case 'debug-transaction':
+        require_once BASE_PATH . '/app/controllers/TransactionController.php';
+        $controller = new TransactionController();
+        $controller->debugTransaction();
+        break;
     // Default route
     default:
         echo "404 - Not Found";

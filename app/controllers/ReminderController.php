@@ -39,10 +39,32 @@ class ReminderController {
     }
     
     public function processScheduled() {
+        // Force one reminder to be due now for testing
+        $db = getDbConnection(); // Get the database connection
+        
+        $updateSql = "UPDATE communication_attempts 
+                     SET scheduled_at = DATE_SUB(NOW(), INTERVAL 1 MINUTE) 
+                     WHERE status = 'scheduled' 
+                     LIMIT 5";
+                     
+        $db->query($updateSql);
+        error_log("Updated one reminder to be due now for testing");
+        
+        // Log the start time
+        $startTime = microtime(true);
+        
         // Send scheduled reminders
         $sent = $this->reminderService->sendScheduledReminders();
         
-        echo "Sent {$sent} reminders.";
+        // Calculate execution time
+        $executionTime = round(microtime(true) - $startTime, 2);
+        
+        // Output results
+        echo "<h1>Reminder Processing Results</h1>";
+        echo "<p>Processed at: " . date('Y-m-d H:i:s') . "</p>";
+        echo "<p>Sent {$sent} reminders.</p>";
+        echo "<p>Execution time: {$executionTime} seconds</p>";
+        echo "<p><a href='index.php?route=dashboard'>Back to Dashboard</a></p>";
     }
     
     public function trackOpen() {

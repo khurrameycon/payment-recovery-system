@@ -36,10 +36,11 @@ class TransactionController {
         // Process and save transactions
         $savedCount = 0;
         foreach ($result['transactions'] as $transaction) {
-            // Skip transactions with no email
+            // Generate a placeholder email if missing
             if (empty($transaction['email'])) {
-                error_log("Skipping transaction {$transaction['transaction_id']} due to missing email");
-                continue;
+                // Use transaction ID to create a unique placeholder email
+                $transaction['email'] = 'transaction-' . $transaction['transaction_id'] . '@placeholder.com';
+                error_log("Generated placeholder email for transaction {$transaction['transaction_id']}");
             }
             
             // Find or create customer
@@ -194,6 +195,26 @@ class TransactionController {
         echo "<pre>";
         print_r($allResults);
         echo "</pre>";
+    }
+
+    public function debugTransaction() {
+        // Use one of your known failed transaction IDs with a non-zero amount
+        $transactionId = '10508510583'; // The $25,000 transaction
+        
+        echo "<h1>Debug Transaction Structure</h1>";
+        
+        $result = $this->nmiService->debugTransaction($transactionId);
+        
+        echo "<div style='margin-bottom: 20px;'>";
+        echo "<p>{$result['message']}</p>";
+        echo "</div>";
+        
+        echo "<h2>Raw XML Sample (First 1000 chars)</h2>";
+        echo "<pre style='background-color: #f5f5f5; padding: 15px; overflow: auto;'>";
+        echo htmlspecialchars($result['raw_sample']);
+        echo "</pre>";
+        
+        echo "<p>Check the server root directory for the full XML and structure breakdown files.</p>";
     }
 }
 ?>

@@ -1,0 +1,461 @@
+XML STRUCTURE BREAKDOWN:
+
+Element: transaction
+  Path: transaction
+  Attributes: none
+
+  Element: transaction_id
+    Path: transaction/transaction_id
+    Value: 10508510583
+    Attributes: none
+
+  Element: partial_payment_id
+    Path: transaction/partial_payment_id
+    Attributes: none
+
+  Element: partial_payment_balance
+    Path: transaction/partial_payment_balance
+    Attributes: none
+
+  Element: platform_id
+    Path: transaction/platform_id
+    Attributes: none
+
+  Element: transaction_type
+    Path: transaction/transaction_type
+    Value: cc
+    Attributes: none
+
+  Element: condition
+    Path: transaction/condition
+    Value: failed
+    Attributes: none
+
+  Element: order_id
+    Path: transaction/order_id
+    Attributes: none
+
+  Element: authorization_code
+    Path: transaction/authorization_code
+    Attributes: none
+
+  Element: ponumber
+    Path: transaction/ponumber
+    Attributes: none
+
+  Element: order_description
+    Path: transaction/order_description
+    Attributes: none
+
+  Element: first_name
+    Path: transaction/first_name
+    Value: Khurram
+    Attributes: none
+
+  Element: last_name
+    Path: transaction/last_name
+    Value: Umair
+    Attributes: none
+
+  Element: address_1
+    Path: transaction/address_1
+    Value: House # A-12, Shehzad Street, Muhammadi Town
+    Attributes: none
+
+  Element: address_2
+    Path: transaction/address_2
+    Value: ijazabad Road, Gulbahar #4
+    Attributes: none
+
+  Element: company
+    Path: transaction/company
+    Attributes: none
+
+  Element: city
+    Path: transaction/city
+    Value: Peshawar
+    Attributes: none
+
+  Element: state
+    Path: transaction/state
+    Attributes: none
+
+  Element: postal_code
+    Path: transaction/postal_code
+    Attributes: none
+
+  Element: country
+    Path: transaction/country
+    Value: PK
+    Attributes: none
+
+  Element: email
+    Path: transaction/email
+    Attributes: none
+
+  Element: phone
+    Path: transaction/phone
+    Attributes: none
+
+  Element: fax
+    Path: transaction/fax
+    Attributes: none
+
+  Element: cell_phone
+    Path: transaction/cell_phone
+    Attributes: none
+
+  Element: customertaxid
+    Path: transaction/customertaxid
+    Attributes: none
+
+  Element: customerid
+    Path: transaction/customerid
+    Attributes: none
+
+  Element: website
+    Path: transaction/website
+    Attributes: none
+
+  Element: shipping_first_name
+    Path: transaction/shipping_first_name
+    Attributes: none
+
+  Element: shipping_last_name
+    Path: transaction/shipping_last_name
+    Attributes: none
+
+  Element: shipping_address_1
+    Path: transaction/shipping_address_1
+    Attributes: none
+
+  Element: shipping_address_2
+    Path: transaction/shipping_address_2
+    Attributes: none
+
+  Element: shipping_company
+    Path: transaction/shipping_company
+    Attributes: none
+
+  Element: shipping_city
+    Path: transaction/shipping_city
+    Attributes: none
+
+  Element: shipping_state
+    Path: transaction/shipping_state
+    Attributes: none
+
+  Element: shipping_postal_code
+    Path: transaction/shipping_postal_code
+    Attributes: none
+
+  Element: shipping_country
+    Path: transaction/shipping_country
+    Value: US
+    Attributes: none
+
+  Element: shipping_email
+    Path: transaction/shipping_email
+    Attributes: none
+
+  Element: shipping_carrier
+    Path: transaction/shipping_carrier
+    Attributes: none
+
+  Element: tracking_number
+    Path: transaction/tracking_number
+    Attributes: none
+
+  Element: shipping_date
+    Path: transaction/shipping_date
+    Attributes: none
+
+  Element: shipping
+    Path: transaction/shipping
+    Value: 0.00
+    Attributes: none
+
+  Element: shipping_phone
+    Path: transaction/shipping_phone
+    Attributes: none
+
+  Element: cc_number
+    Path: transaction/cc_number
+    Value: 4xxxxxxxxxxx4242
+    Attributes: none
+
+  Element: cc_hash
+    Path: transaction/cc_hash
+    Value: d51fd0016a9c1540e6dda2774e7b1981
+    Attributes: none
+
+  Element: cc_exp
+    Path: transaction/cc_exp
+    Value: 1225
+    Attributes: none
+
+  Element: cavv
+    Path: transaction/cavv
+    Attributes: none
+
+  Element: cavv_result
+    Path: transaction/cavv_result
+    Attributes: none
+
+  Element: xid
+    Path: transaction/xid
+    Attributes: none
+
+  Element: eci
+    Path: transaction/eci
+    Attributes: none
+
+  Element: directory_server_id
+    Path: transaction/directory_server_id
+    Attributes: none
+
+  Element: three_ds_version
+    Path: transaction/three_ds_version
+    Attributes: none
+
+  Element: avs_response
+    Path: transaction/avs_response
+    Value: N
+    Attributes: none
+
+  Element: csc_response
+    Path: transaction/csc_response
+    Value: N
+    Attributes: none
+
+  Element: cardholder_auth
+    Path: transaction/cardholder_auth
+    Attributes: none
+
+  Element: cc_start_date
+    Path: transaction/cc_start_date
+    Attributes: none
+
+  Element: cc_issue_number
+    Path: transaction/cc_issue_number
+    Attributes: none
+
+  Element: check_account
+    Path: transaction/check_account
+    Attributes: none
+
+  Element: check_hash
+    Path: transaction/check_hash
+    Attributes: none
+
+  Element: check_aba
+    Path: transaction/check_aba
+    Attributes: none
+
+  Element: check_name
+    Path: transaction/check_name
+    Attributes: none
+
+  Element: account_holder_type
+    Path: transaction/account_holder_type
+    Attributes: none
+
+  Element: account_type
+    Path: transaction/account_type
+    Attributes: none
+
+  Element: sec_code
+    Path: transaction/sec_code
+    Attributes: none
+
+  Element: drivers_license_number
+    Path: transaction/drivers_license_number
+    Attributes: none
+
+  Element: drivers_license_state
+    Path: transaction/drivers_license_state
+    Attributes: none
+
+  Element: drivers_license_dob
+    Path: transaction/drivers_license_dob
+    Attributes: none
+
+  Element: social_security_number
+    Path: transaction/social_security_number
+    Attributes: none
+
+  Element: processor_id
+    Path: transaction/processor_id
+    Value: ccprocessora
+    Attributes: none
+
+  Element: tax
+    Path: transaction/tax
+    Value: 0.00
+    Attributes: none
+
+  Element: currency
+    Path: transaction/currency
+    Value: USD
+    Attributes: none
+
+  Element: surcharge
+    Path: transaction/surcharge
+    Attributes: none
+
+  Element: convenience_fee
+    Path: transaction/convenience_fee
+    Attributes: none
+
+  Element: misc_fee
+    Path: transaction/misc_fee
+    Attributes: none
+
+  Element: misc_fee_name
+    Path: transaction/misc_fee_name
+    Attributes: none
+
+  Element: cash_discount
+    Path: transaction/cash_discount
+    Attributes: none
+
+  Element: tip
+    Path: transaction/tip
+    Attributes: none
+
+  Element: card_balance
+    Path: transaction/card_balance
+    Attributes: none
+
+  Element: card_available_balance
+    Path: transaction/card_available_balance
+    Attributes: none
+
+  Element: entry_mode
+    Path: transaction/entry_mode
+    Value: Keyed
+    Attributes: none
+
+  Element: cc_bin
+    Path: transaction/cc_bin
+    Value: 424242
+    Attributes: none
+
+  Element: cc_type
+    Path: transaction/cc_type
+    Value: Visa
+    Attributes: none
+
+  Element: signature_image
+    Path: transaction/signature_image
+    Attributes: none
+
+  Element: duty_amount
+    Path: transaction/duty_amount
+    Attributes: none
+
+  Element: discount_amount
+    Path: transaction/discount_amount
+    Attributes: none
+
+  Element: national_tax_amount
+    Path: transaction/national_tax_amount
+    Attributes: none
+
+  Element: summary_commodity_code
+    Path: transaction/summary_commodity_code
+    Attributes: none
+
+  Element: vat_tax_amount
+    Path: transaction/vat_tax_amount
+    Attributes: none
+
+  Element: vat_tax_rate
+    Path: transaction/vat_tax_rate
+    Attributes: none
+
+  Element: alternate_tax_amount
+    Path: transaction/alternate_tax_amount
+    Attributes: none
+
+  Element: action
+    Path: transaction/action
+    Attributes: none
+
+    Element: amount
+      Path: transaction/action/amount
+      Value: 25000.00
+      Attributes: none
+
+    Element: action_type
+      Path: transaction/action/action_type
+      Value: sale
+      Attributes: none
+
+    Element: date
+      Path: transaction/action/date
+      Value: 20250314205059
+      Attributes: none
+
+    Element: success
+      Path: transaction/action/success
+      Attributes: none
+
+    Element: ip_address
+      Path: transaction/action/ip_address
+      Value: 115.186.173.126
+      Attributes: none
+
+    Element: source
+      Path: transaction/action/source
+      Value: virtual_terminal
+      Attributes: none
+
+    Element: api_method
+      Path: transaction/action/api_method
+      Attributes: none
+
+    Element: tap_to_mobile
+      Path: transaction/action/tap_to_mobile
+      Value: false
+      Attributes: none
+
+    Element: username
+      Path: transaction/action/username
+      Value: Simple2
+      Attributes: none
+
+    Element: response_text
+      Path: transaction/action/response_text
+      Value: DECLINE
+      Attributes: none
+
+    Element: batch_id
+      Path: transaction/action/batch_id
+      Attributes: none
+
+    Element: processor_batch_id
+      Path: transaction/action/processor_batch_id
+      Attributes: none
+
+    Element: response_code
+      Path: transaction/action/response_code
+      Value: 200
+      Attributes: none
+
+    Element: processor_response_text
+      Path: transaction/action/processor_response_text
+      Attributes: none
+
+    Element: processor_response_code
+      Path: transaction/action/processor_response_code
+      Attributes: none
+
+    Element: device_license_number
+      Path: transaction/action/device_license_number
+      Attributes: none
+
+    Element: device_nickname
+      Path: transaction/action/device_nickname
+      Attributes: none
+
