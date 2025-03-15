@@ -97,3 +97,6 @@ Build recommendation engine for recovery strategies
 
 
 This revised plan incorporates the smart retry timing, customer segmentation, and multi-channel approach as core components rather than add-ons, ensuring they're deeply integrated into the system's architecture from the beginning.
+
+
+http://localhost/payment-recovery/public/index.php?route=process-reminders
