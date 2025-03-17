@@ -170,6 +170,59 @@ public function advancedAnalytics() {
     include BASE_PATH . '/app/views/advanced_analytics.php';
 }
 
+
+private function getRecoveryRatesByDayOfWeek() {
+    $sql = "
+        SELECT 
+            DAYOFWEEK(ca.sent_at) as day_of_week,
+            COUNT(DISTINCT ca.transaction_id) as total_sent,
+            SUM(CASE WHEN ft.recovery_status = 'recovered' THEN 1 ELSE 0 END) as recovered
+        FROM communication_attempts ca
+        JOIN failed_transactions ft ON ca.transaction_id = ft.id
+        WHERE ca.status != 'scheduled'
+        GROUP BY DAYOFWEEK(ca.sent_at)
+        ORDER BY DAYOFWEEK(ca.sent_at)
+    ";
+    
+    $result = $this->db->query($sql);
+    $stats = [];
+    
+    $dayNames = [
+        1 => 'Sunday',
+        2 => 'Monday',
+        3 => 'Tuesday',
+        4 => 'Wednesday',
+        5 => 'Thursday',
+        6 => 'Friday',
+        7 => 'Saturday'
+    ];
+    
+    while ($row = $result->fetch_assoc()) {
+        $dayNumber = $row['day_of_week'];
+        $dayName = $dayNames[$dayNumber];
+        $totalSent = $row['total_sent'];
+        $recovered = $row['recovered'];
+        
+        $recoveryRate = $totalSent > 0 ? 
+            round(($recovered / $totalSent) * 100, 2) : 0;
+        
+        $stats[] = [
+            'day_of_week' => $dayNumber,
+            'day_name' => $dayName,
+            'total_sent' => $totalSent,
+            'recovered' => $recovered,
+            'recovery_rate' => $recoveryRate
+        ];
+    }
+    
+    return $stats;
+}
+
+/**
+ * Get recovery rate by time of day
+ * 
+ * @return array Time of day stats
+ */
 private function getRecoveryRatesByTimeOfDay() {
     $sql = "
         SELECT 
@@ -187,36 +240,84 @@ private function getRecoveryRatesByTimeOfDay() {
     $stats = [];
     
     while ($row = $result->fetch_assoc()) {
-        $row['recovery_rate'] = $row['total_sent'] > 0 ? 
-            round(($row['recovered'] / $row['total_sent']) * 100, 2) : 0;
-        $stats[] = $row;
+        $hourOfDay = $row['hour_of_day'];
+        $totalSent = $row['total_sent'];
+        $recovered = $row['recovered'];
+        
+        $recoveryRate = $totalSent > 0 ? 
+            round(($recovered / $totalSent) * 100, 2) : 0;
+        
+        $stats[] = [
+            'hour_of_day' => $hourOfDay,
+            'total_sent' => $totalSent,
+            'recovered' => $recovered,
+            'recovery_rate' => $recoveryRate
+        ];
     }
     
     return $stats;
 }
 
+/**
+ * Get average time to recovery
+ * 
+ * @return float Average hours to recovery
+ */
+private function getAverageTimeToRecovery() {
+    $sql = "
+        SELECT 
+            AVG(TIMESTAMPDIFF(HOUR, ft.transaction_date, pr.recovery_date)) as avg_hours
+        FROM failed_transactions ft
+        JOIN payment_recovery pr ON ft.id = pr.transaction_id
+        WHERE ft.recovery_status = 'recovered'
+            AND pr.status = 'completed'
+    ";
+    
+    $result = $this->db->query($sql);
+    $row = $result->fetch_assoc();
+    
+    return round($row['avg_hours'] ?? 0, 1);
+}
+
+/**
+ * Get recovery rate by customer segment
+ * 
+ * @return array Segment stats
+ */
 private function getRecoveryRatesBySegment() {
     $sql = "
         SELECT 
-            c.segment,
+            COALESCE(c.segment, 'standard') as segment,
             COUNT(DISTINCT ft.id) as total_transactions,
             SUM(CASE WHEN ft.recovery_status = 'recovered' THEN 1 ELSE 0 END) as recovered
         FROM failed_transactions ft
         JOIN customers c ON ft.customer_id = c.id
-        GROUP BY c.segment
+        GROUP BY COALESCE(c.segment, 'standard')
     ";
     
     $result = $this->db->query($sql);
     $stats = [];
     
     while ($row = $result->fetch_assoc()) {
-        $row['recovery_rate'] = $row['total_transactions'] > 0 ? 
-            round(($row['recovered'] / $row['total_transactions']) * 100, 2) : 0;
-        $stats[] = $row;
+        $segment = $row['segment'] ?: 'standard';
+        $totalTransactions = $row['total_transactions'];
+        $recovered = $row['recovered'];
+        
+        $recoveryRate = $totalTransactions > 0 ? 
+            round(($recovered / $totalTransactions) * 100, 2) : 0;
+        
+        $stats[] = [
+            'segment' => $segment,
+            'total_transactions' => $totalTransactions,
+            'recovered' => $recovered,
+            'recovery_rate' => $recoveryRate
+        ];
     }
     
     return $stats;
 }
+
+
 }
 
 

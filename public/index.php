@@ -133,6 +133,45 @@ switch ($route) {
         $controller = new TransactionController();
         $controller->debugTransaction();
         break;
+
+    // Add to existing switch statement
+case 'settings/general':
+    require_once BASE_PATH . '/app/controllers/SettingsController.php';
+    $controller = new SettingsController();
+    $controller->general();
+    break;
+
+case 'settings/branding':
+    require_once BASE_PATH . '/app/controllers/SettingsController.php';
+    $controller = new SettingsController();
+    $controller->branding();
+    break;
+
+case 'settings/users':
+    require_once BASE_PATH . '/app/controllers/SettingsController.php';
+    $controller = new SettingsController();
+    $controller->users();
+    break;
+
+case 'settings/api':
+    require_once BASE_PATH . '/app/controllers/SettingsController.php';
+    $controller = new SettingsController();
+    $controller->api();
+    break;
+    
+case 'settings/billing':
+    require_once BASE_PATH . '/app/controllers/SettingsController.php';
+    $controller = new SettingsController();
+    $controller->billing();
+    break;
+
+    case 'settings':
+        require_once BASE_PATH . '/app/controllers/SettingsController.php';
+        $controller = new SettingsController();
+        $controller->general(); // Redirect to general settings by default
+        break;
+    
+    
     // Default route
     default:
         echo "404 - Not Found";

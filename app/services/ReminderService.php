@@ -1,21 +1,22 @@
 <?php
 require_once BASE_PATH . '/app/models/Transaction.php';
 require_once BASE_PATH . '/app/models/Customer.php';
+require_once BASE_PATH . '/app/services/TimeOptimizationService.php';
+
 
 class ReminderService {
     private $db;
     private $transactionModel;
     private $customerModel;
+    private $timeOptimizer;
     
     public function __construct() {
         $this->db = getDbConnection();
         $this->transactionModel = new Transaction();
         $this->customerModel = new Customer();
+        $this->timeOptimizer = new TimeOptimizationService();
     }
     
-    /**
-     * Schedule a reminder for a transaction
-     */
     public function scheduleReminder($transactionId, $channel = 'email') {
         // Get transaction and customer info
         $transaction = $this->transactionModel->getTransactionById($transactionId);
@@ -29,6 +30,9 @@ class ReminderService {
         if (!$customer) {
             return false;
         }
+        
+        // Determine transaction value category
+        $transactionType = $this->categorizeTransactionValue($transaction['amount']);
         
         // Check if this would be the first, second, or third reminder
         $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM communication_attempts 
@@ -44,27 +48,19 @@ class ReminderService {
             return false;
         }
         
-        // Determine template based on reminder count
-        $template = 'reminder_' . ($reminderCount + 1);
+        // Determine template based on reminder count and transaction type
+        $template = $this->getTemplateForReminder($reminderCount + 1, $transactionType);
         
-        // Calculate when to send based on timezone
-        $timezone = $customer['timezone'] ?: 'UTC';
-        $now = new DateTime('now', new DateTimeZone($timezone));
+        // Get optimal send time using TimeOptimizationService
+        $optimalDateTime = $this->timeOptimizer->getOptimalSendTime(
+            $transaction['customer_id'], 
+            $transactionType
+        );
         
-        // If it's after 8pm or before 8am, schedule for 10am
-        $hour = (int)$now->format('H');
-        if ($hour >= 20 || $hour < 8) {
-            $now->setTime(10, 0); // Set to 10am
-            // If it's after 8pm, schedule for next day
-            if ($hour >= 20) {
-                $now->modify('+1 day');
-            }
-        }
-        
-        $scheduledAt = $now->format('Y-m-d H:i:s');
+        $scheduledAt = $optimalDateTime->format('Y-m-d H:i:s');
         
         // Generate tracking ID
-        $trackingId = uniqid() . bin2hex(random_bytes(4));
+        $trackingId = uniqid() . bin2hex(random_bytes(8));
         
         // Insert into communication_attempts
         $stmt = $this->db->prepare("INSERT INTO communication_attempts 
@@ -72,8 +68,49 @@ class ReminderService {
                                     VALUES (?, ?, 'scheduled', ?, ?, ?)");
         $stmt->bind_param("issss", $transactionId, $channel, $scheduledAt, $template, $trackingId);
         
-        return $stmt->execute();
+        $success = $stmt->execute();
+        
+        if ($success) {
+            // Log the scheduling
+            error_log("Scheduled {$channel} reminder for transaction {$transactionId} at {$scheduledAt} using template {$template}");
+        } else {
+            error_log("Failed to schedule reminder: " . $stmt->error);
+        }
+        
+        return $success;
     }
+    
+    /**
+     * Categorize transaction value into high, medium, or low
+     */
+    private function categorizeTransactionValue($amount) {
+        if ($amount >= 500) {
+            return 'high_value';
+        } else if ($amount >= 100) {
+            return 'medium_value';
+        } else {
+            return 'low_value';
+        }
+    }
+    
+    /**
+     * Get appropriate template based on reminder number and transaction type
+     */
+    private function getTemplateForReminder($reminderNumber, $transactionType) {
+        // Base template name
+        $base = "reminder_{$reminderNumber}";
+        
+        // If it's a high value transaction, use specific templates
+        if ($transactionType == 'high_value') {
+            return "{$base}_high_value";
+        } else if ($transactionType == 'medium_value') {
+            return "{$base}_medium_value";
+        }
+        
+        // Default template
+        return $base;
+    }
+    
     
     /**
      * Send scheduled reminders
