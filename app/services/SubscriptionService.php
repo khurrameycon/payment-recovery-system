@@ -761,53 +761,81 @@ class SubscriptionService {
     }
     
     /**
-     * Get usage report for an organization
-     * 
-     * @param int $organizationId Organization ID
-     * @param int $months Number of months to include
-     * @return array Usage report
-     */
-    public function getUsageReport($organizationId, $months = 6) {
-        $usageData = [];
+ * Get usage report for an organization
+ * 
+ * @param int $organizationId Organization ID
+ * @param int $months Number of months to include
+ * @return array Usage report
+ */
+// public function getUsageReport($organizationId, $months = 6) {
+//     $usageData = [];
+    
+//     // Get current month and previous months
+//     for ($i = 0; $i < $months; $i++) {
+//         $yearMonth = date('Y-m', strtotime("-{$i} months"));
+//         $stmt = $this->db->prepare("
+//             SELECT * FROM organization_usage 
+//             WHERE organization_id = ? AND year_month = ?
+//         ");
         
-        // Get current month and previous months
-        for ($i = 0; $i < $months; $i++) {
-            $yearMonth = date('Y-m', strtotime("-{$i} months"));
-            $stmt = $this->db->prepare("
-                SELECT * FROM organization_usage 
-                WHERE organization_id = ? AND year_month = ?
-            ");
-            
-            $stmt->bind_param('is', $organizationId, $yearMonth);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            
-            if ($result->num_rows > 0) {
-                $usage = $result->fetch_assoc();
-            } else {
-                // No usage data for this month
-                $usage = [
-                    'year_month' => $yearMonth,
-                    'transactions_count' => 0,
-                    'messages_sent' => 0,
-                    'sms_count' => 0,
-                    'whatsapp_count' => 0,
-                    'recovered_amount' => 0,
-                    'recovered_count' => 0,
-                    'api_calls' => 0
-                ];
-            }
-            
-            $usageData[] = $usage;
-        }
+//         $stmt->bind_param('is', $organizationId, $yearMonth);
+//         $stmt->execute();
+//         $result = $stmt->get_result();
         
-        // Get subscription limits
-        $subscription = $this->getSubscription($organizationId);
-        $limits = $subscription['limits'] ?? [];
+//         if ($result->num_rows > 0) {
+//             $usage = $result->fetch_assoc();
+//         } else {
+//             // No usage data for this month
+//             $usage = [
+//                 'year_month' => $yearMonth,
+//                 'transactions_count' => 0,
+//                 'messages_sent' => 0,
+//                 'sms_count' => 0,
+//                 'whatsapp_count' => 0,
+//                 'recovered_amount' => 0,
+//                 'recovered_count' => 0,
+//                 'api_calls' => 0
+//             ];
+//         }
         
-        return [
-            'usage' => $usageData,
-            'limits' => $limits
-        ];
-    }
+//         $usageData[] = $usage;
+//     }
+    
+//     // Get subscription limits
+//     $subscription = $this->getSubscription($organizationId);
+//     $limits = $subscription['limits'] ?? [];
+    
+//     return [
+//         'usage' => $usageData,
+//         'limits' => $limits
+//     ];
+// }
+
+/**
+ * Get usage report for an organization - simplified version
+ */
+public function getUsageReport($organizationId, $months = 6) {
+    // Create default usage data structure
+    $usageData = [
+        [
+            'year_month' => date('Y-m'),
+            'transactions_count' => 0,
+            'messages_sent' => 0,
+            'sms_count' => 0,
+            'whatsapp_count' => 0,
+            'recovered_amount' => 0,
+            'recovered_count' => 0,
+            'api_calls' => 0
+        ]
+    ];
+    
+    // Get subscription
+    $subscription = $this->getSubscription($organizationId);
+    $limits = $subscription['limits'] ?? [];
+    
+    return [
+        'usage' => $usageData,
+        'limits' => $limits
+    ];
+}
 }

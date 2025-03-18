@@ -171,10 +171,32 @@ case 'settings/billing':
         $controller->general(); // Redirect to general settings by default
         break;
     
-    
+    case 'register':
+        require_once BASE_PATH . '/app/controllers/RegisterController.php';
+        $controller = new RegisterController();
+        $controller->showRegister();
+        break;
+        
+    case 'process-register':
+        require_once BASE_PATH . '/app/controllers/RegisterController.php';
+        $controller = new RegisterController();
+        $controller->processRegister();
+        break;
     // Default route
     default:
         echo "404 - Not Found";
+        break;
+    
+    case 'settings/create-token':
+        require_once BASE_PATH . '/app/controllers/TokenController.php';
+        $controller = new TokenController();
+        $controller->createToken();
+        break;
+        
+    case 'settings/revoke-token':
+        require_once BASE_PATH . '/app/controllers/TokenController.php';
+        $controller = new TokenController();
+        $controller->revokeToken();
         break;
 }
 ?>
