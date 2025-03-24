@@ -7,6 +7,9 @@ class SegmentationEngine {
     public function __construct() {
         $this->db = getDbConnection();
     }
+
+
+
     
     /**
      * Analyze and segment a customer based on their transaction history and behavior
@@ -415,5 +418,99 @@ class SegmentationEngine {
         ];
         
         return $strategies[$segment] ?? $strategies['standard'];
+    }
+
+
+    /**
+ * Run segmentation on all customers and apply optimal strategies
+ */
+public function performBulkSegmentation() {
+    // Get all customers
+    $sql = "SELECT id FROM customers";
+    $result = $this->db->query($sql);
+    
+    $totalCustomers = 0;
+    $updatedCustomers = 0;
+    
+    while ($row = $result->fetch_assoc()) {
+        $totalCustomers++;
+        $customerId = $row['id'];
+        
+        // Analyze and update customer segment
+        $segmentProfile = $this->analyzeCustomer($customerId);
+        
+        // Apply communication strategy based on segment
+        if ($this->applySegmentStrategy($customerId, $segmentProfile['combined_segment'])) {
+            $updatedCustomers++;
+        }
+    }
+    
+    return [
+        'total' => $totalCustomers,
+        'updated' => $updatedCustomers
+    ];
+}
+
+/**
+ * Apply communication strategy based on segment
+ */
+public function applySegmentStrategy($customerId, $segment) {
+    // Get strategy for this segment
+    $sql = "SELECT * FROM segment_strategies WHERE segment = ?";
+    $stmt = $this->db->prepare($sql);
+    $stmt->bind_param("s", $segment);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($result->num_rows === 0) {
+        // Use default strategy if specific one not found
+        $segment = 'standard';
+        $sql = "SELECT * FROM segment_strategies WHERE segment = 'standard'";
+        $result = $this->db->query($sql);
+    }
+    
+    $strategy = $result->fetch_assoc();
+    
+    // Update customer communication preferences
+    $sql = "UPDATE customers SET 
+            preferred_channel = ?,
+            fallback_channel = ?,
+            max_attempts = ?,
+            min_hours_between = ?,
+            preferred_time = ?,
+            template_set = ?
+            WHERE id = ?";
+    
+    $stmt = $this->db->prepare($sql);
+    $stmt->bind_param(
+        "ssiiisi",
+        $strategy['primary_channel'],
+        $strategy['fallback_channel'],
+        $strategy['max_attempts'],
+        $strategy['min_hours_between'],
+        $strategy['preferred_time'],
+        $strategy['template_set'],
+        $customerId
+    );
+    
+    return $stmt->execute();
+}
+
+/**
+ * Get segmentation statistics for reporting
+ */
+public function getSegmentationStats() {
+    $sql = "SELECT combined_segment, COUNT(*) as count 
+            FROM customer_segmentation 
+            GROUP BY combined_segment";
+    
+    $result = $this->db->query($sql);
+    
+    $stats = [];
+    while ($row = $result->fetch_assoc()) {
+        $stats[$row['combined_segment']] = $row['count'];
+    }
+    
+    return $stats;
     }
 }

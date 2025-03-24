@@ -700,4 +700,128 @@ class WhatsAppService {
             $db->query($sql);
         }
     }
+
+    /**
+     * Send payment recovery reminder via WhatsApp
+     * 
+     * @param int $transactionId Transaction to recover
+     * @param array $options Additional options
+     * @return array Result with status and details
+     */
+    public function sendRecoveryReminder($transactionId, $options = []) {
+        // Get transaction details
+        $transaction = $this->getTransactionDetails($transactionId);
+        if (!$transaction) {
+            return [
+                'success' => false,
+                'message' => 'Transaction not found'
+            ];
+        }
+        
+        // Get customer details
+        $customer = $this->getCustomerDetails($transaction['customer_id']);
+        if (!$customer || empty($customer['phone'])) {
+            return [
+                'success' => false,
+                'message' => 'Customer phone number not found'
+            ];
+        }
+        
+        // Get recovery link
+        $recoveryLink = $this->getRecoveryLink($transactionId);
+        if (!$recoveryLink) {
+            return [
+                'success' => false,
+                'message' => 'Recovery link not found'
+            ];
+        }
+        
+        // Generate tracking ID for this attempt
+        $trackingId = uniqid() . bin2hex(random_bytes(4));
+        
+        // Add tracking parameter to recovery link
+        $trackingUrl = $recoveryLink['recovery_link'] . '&track=' . $trackingId;
+        
+        // Determine template based on segment and attempt number
+        $template = $options['template'] ?? 'payment_recovery';
+        $customerName = $customer['first_name'] ?? 'Customer';
+        
+        // Format amount with proper currency symbol
+        $amount = number_format($transaction['amount'], 2);
+        
+        // Send the WhatsApp message
+        $result = $this->sendTemplateMessage(
+            $customer['phone'],
+            $template,
+            [$customerName, $amount, $trackingUrl],
+            $options['language'] ?? 'en_US'
+        );
+        
+        // Record the communication attempt if message sending was successful
+        if ($result['success']) {
+            $whatsappMessageId = $result['messages'][0]['id'] ?? null;
+            $templateName = $template;
+            
+            $stmt = $this->db->prepare("INSERT INTO communication_attempts 
+                                    (transaction_id, channel, status, scheduled_at, sent_at, message_template, tracking_id, external_id) 
+                                    VALUES (?, 'whatsapp', 'sent', NOW(), NOW(), ?, ?, ?)");
+            $stmt->bind_param("isss", $transactionId, $templateName, $trackingId, $whatsappMessageId);
+            $stmt->execute();
+            
+            // Update organization usage statistics if this is a multi-tenant system
+            if (isset($transaction['organization_id'])) {
+                $this->updateUsageStats($transaction['organization_id'], 'whatsapp');
+            }
+            
+            return [
+                'success' => true,
+                'message' => 'WhatsApp reminder sent successfully',
+                'tracking_id' => $trackingId
+            ];
+        }
+        
+        return [
+            'success' => false,
+            'message' => $result['error'] ?? 'Failed to send WhatsApp message',
+            'details' => $result
+        ];
+    }
+
+    /**
+     * Update organization usage statistics
+     */
+    private function updateUsageStats($organizationId, $channel) {
+        $yearMonth = date('Y-m');
+        
+        // Check if we have a record for this month
+        $stmt = $this->db->prepare("
+            SELECT id FROM organization_usage 
+            WHERE organization_id = ? AND year_month = ?
+        ");
+        
+        $stmt->bind_param('is', $organizationId, $yearMonth);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows === 0) {
+            // Create new record
+            $sql = "INSERT INTO organization_usage 
+                (organization_id, year_month, messages_sent, {$channel}_count) 
+                VALUES (?, ?, 1, 1)";
+            
+            $stmt = $this->db->prepare($sql);
+            $stmt->bind_param('is', $organizationId, $yearMonth);
+        } else {
+            // Update existing record
+            $row = $result->fetch_assoc();
+            $sql = "UPDATE organization_usage 
+                SET messages_sent = messages_sent + 1, {$channel}_count = {$channel}_count + 1 
+                WHERE id = ?";
+            
+            $stmt = $this->db->prepare($sql);
+            $stmt->bind_param('i', $row['id']);
+        }
+        
+        $stmt->execute();
+    }
 }

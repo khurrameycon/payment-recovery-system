@@ -422,5 +422,139 @@ class ReminderService {
         // Return success - don't update the status here, let the calling function do it
         return true;
     }
+
+    
+    // Add to app/services/ReminderService.php
+
+    /**
+     * Schedule reminder with intelligent timing
+     */
+    public function scheduleSmartReminder($transactionId, $options = []) {
+        // Get transaction details
+        $transaction = $this->transactionModel->getTransactionById($transactionId);
+        
+        if (!$transaction) {
+            return [
+                'success' => false,
+                'message' => 'Transaction not found'
+            ];
+        }
+        
+        // Get customer details
+        $customer = $this->customerModel->getById($transaction['customer_id']);
+        
+        if (!$customer) {
+            return [
+                'success' => false,
+                'message' => 'Customer not found'
+            ];
+        }
+        
+        // Determine transaction value category
+        $transactionType = $this->categorizeTransactionValue($transaction['amount']);
+        
+        // Determine customer segment
+        $segment = $customer['segment'] ?? 'standard';
+        
+        // Get segmentation strategy
+        $stmt = $this->db->prepare("SELECT * FROM segment_strategies WHERE segment = ?");
+        $stmt->bind_param("s", $segment);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows === 0) {
+            // Use default strategy
+            $stmt = $this->db->prepare("SELECT * FROM segment_strategies WHERE segment = 'standard'");
+            $stmt->execute();
+            $result = $stmt->get_result();
+        }
+        
+        $strategy = $result->fetch_assoc();
+        
+        // Check if this would exceed max attempts
+        $stmt = $this->db->prepare("SELECT COUNT(*) as count FROM communication_attempts WHERE transaction_id = ?");
+        $stmt->bind_param("i", $transactionId);
+        $stmt->execute();
+        $attemptCount = $stmt->get_result()->fetch_assoc()['count'];
+        
+        if ($attemptCount >= $strategy['max_attempts']) {
+            return [
+                'success' => false,
+                'message' => 'Maximum number of attempts reached'
+            ];
+        }
+        
+        // Determine channel based on strategy and attempt number
+        $channel = $attemptCount === 0 ? $strategy['primary_channel'] : ($strategy['fallback_channel'] ?: $strategy['primary_channel']);
+        
+        // Override channel if specified in options
+        if (!empty($options['channel'])) {
+            $channel = $options['channel'];
+        }
+        
+        // Get template based on segment, channel, and attempt number
+        $templateSet = $strategy['template_set'] ?? 'standard';
+        $attemptNumber = $attemptCount + 1;
+        $template = $this->getTemplateForSegment($templateSet, $channel, $attemptNumber);
+        
+        // Determine optimal send time based on customer timezone and quiet hours
+        $optimalDateTime = $this->timeOptimizer->getOptimalSendTime(
+            $transaction['customer_id'], 
+            $transactionType
+        );
+        
+        // If we're forcing immediate send, use current time
+        if (!empty($options['send_now'])) {
+            $optimalDateTime = new DateTime();
+        }
+        
+        $scheduledAt = $optimalDateTime->format('Y-m-d H:i:s');
+        
+        // Generate tracking ID
+        $trackingId = uniqid() . bin2hex(random_bytes(8));
+        
+        // Insert into communication_attempts
+        $stmt = $this->db->prepare("INSERT INTO communication_attempts 
+                                (transaction_id, channel, status, scheduled_at, message_template, tracking_id) 
+                                VALUES (?, ?, 'scheduled', ?, ?, ?)");
+        $stmt->bind_param("issss", $transactionId, $channel, $scheduledAt, $template, $trackingId);
+        
+        $success = $stmt->execute();
+        
+        if ($success) {
+            return [
+                'success' => true,
+                'message' => ucfirst($channel) . ' reminder scheduled for ' . date('M j, Y g:i A', strtotime($scheduledAt)),
+                'scheduled_at' => $scheduledAt,
+                'channel' => $channel,
+                'tracking_id' => $trackingId
+            ];
+        } else {
+            return [
+                'success' => false,
+                'message' => 'Failed to schedule reminder: ' . $stmt->error
+            ];
+        }
+    }
+
+    /**
+     * Get appropriate template based on segment, channel, and attempt number
+     */
+    private function getTemplateForSegment($templateSet, $channel, $attemptNumber) {
+        // Base template name
+        $base = "reminder_{$attemptNumber}";
+        
+        // Add template set prefix
+        if ($templateSet !== 'standard') {
+            $base = "{$templateSet}_{$base}";
+        }
+        
+        // Add channel suffix
+        if ($channel !== 'email') {
+            $base = "{$base}_{$channel}";
+        }
+        
+        return $base;
+    }
 }
 ?>

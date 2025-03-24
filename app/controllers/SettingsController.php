@@ -783,47 +783,179 @@ class SettingsController {
         
         return false;
     }
+        /**
+     * Display billing settings page
+     */
+    public function billing() {
+        // Check if user is authenticated
+        if (!$this->auth->isAuthenticated()) {
+            header('Location: index.php?route=login');
+            exit;
+        }
+        
+        // Get current user and organization
+        $user = $this->auth->getCurrentUser();
+        $organizationId = $user['organization_id'];
+        
+        if (!$organizationId) {
+            $_SESSION['error'] = "You are not part of an organization.";
+            header('Location: index.php?route=dashboard');
+            exit;
+        }
+        
+        // Check if user has permission
+        if ($user['organization_role'] !== 'owner' && $user['organization_role'] !== 'admin') {
+            $_SESSION['error'] = "You don't have permission to access billing settings.";
+            header('Location: index.php?route=dashboard');
+            exit;
+        }
+        
+        // Include subscription service
+        require_once BASE_PATH . '/app/services/SubscriptionService.php';
+        $subscriptionService = new SubscriptionService();
+        
+        // Get subscription data
+        $subscription = $subscriptionService->getSubscription($organizationId);
+        $plans = $subscriptionService->getPlans();
+        $billingHistory = $subscriptionService->getBillingHistory($organizationId);
+        $usageReport = $subscriptionService->getUsageReport($organizationId);
+        
+        // Get organization users for usage display
+        $users = $this->organization->getUsers($organizationId);
+        
+        // Load billing settings view
+        include BASE_PATH . '/app/views/settings/billing.php';
+    }
+
     /**
- * Display billing settings page
- */
-public function billing() {
-    // Check if user is authenticated
-    if (!$this->auth->isAuthenticated()) {
-        header('Location: index.php?route=login');
+     * Display communication settings page
+     */
+    public function communicationSettings() {
+        // Check if user is authenticated
+        if (!$this->auth->isAuthenticated()) {
+            header('Location: index.php?route=login');
+            exit;
+        }
+        
+        // Get current user and organization
+        $user = $this->auth->getCurrentUser();
+        $organizationId = $user['organization_id'];
+        
+        if (!$organizationId) {
+            $_SESSION['error'] = "You are not part of an organization.";
+            header('Location: index.php?route=dashboard');
+            exit;
+        }
+        
+        // Get organization details
+        $organization = $this->organization->getById($organizationId);
+        
+        // Check if user has permission
+        if ($user['organization_role'] !== 'owner' && $user['organization_role'] !== 'admin') {
+            $_SESSION['error'] = "You don't have permission to access settings.";
+            header('Location: index.php?route=dashboard');
+            exit;
+        }
+        
+        // Get current settings
+        $settings = $organization['settings'];
+        
+        // Get segment strategies
+        $stmt = $this->db->prepare("SELECT * FROM segment_strategies ORDER BY FIELD(segment, 'vip', 'high_priority', 'standard', 'nurture', 'low_priority')");
+        $stmt->execute();
+        $segmentStrategies = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        
+        // Load view
+        include BASE_PATH . '/app/views/settings/communication.php';
+    }
+
+    /**
+     * Update communication settings
+     */
+    public function updateCommunicationSettings() {
+        // Check if user is authenticated
+        if (!$this->auth->isAuthenticated()) {
+            header('Location: index.php?route=login');
+            exit;
+        }
+        
+        // Get current user and organization
+        $user = $this->auth->getCurrentUser();
+        $organizationId = $user['organization_id'];
+        
+        if (!$organizationId) {
+            $_SESSION['error'] = "You are not part of an organization.";
+            header('Location: index.php?route=dashboard');
+            exit;
+        }
+        
+        // Check if user has permission
+        if ($user['organization_role'] !== 'owner' && $user['organization_role'] !== 'admin') {
+            $_SESSION['error'] = "You don't have permission to update settings.";
+            header('Location: index.php?route=dashboard');
+            exit;
+        }
+        
+        // Validate CSRF token
+        if (!isset($_POST['csrf_token']) || !$this->auth->verifyCSRFToken($_POST['csrf_token'])) {
+            $_SESSION['error'] = "Invalid security token. Please try again.";
+            header('Location: index.php?route=settings/communication');
+            exit;
+        }
+        
+        // Process business hours
+        $businessHoursStart = $this->errorHandler->validateInput($_POST['business_hours_start'] ?? '9', 'int', ['min' => 0, 'max' => 23]);
+        $businessHoursEnd = $this->errorHandler->validateInput($_POST['business_hours_end'] ?? '17', 'int', ['min' => 0, 'max' => 23]);
+        $sendOnWeekends = isset($_POST['send_on_weekends']) ? true : false;
+        $respectHolidays = isset($_POST['respect_holidays']) ? true : false;
+        
+        // Process quiet hours
+        $quietHoursStart = $this->errorHandler->validateInput($_POST['quiet_hours_start'] ?? '22', 'int', ['min' => 0, 'max' => 23]);
+        $quietHoursEnd = $this->errorHandler->validateInput($_POST['quiet_hours_end'] ?? '7', 'int', ['min' => 0, 'max' => 23]);
+        
+        // Update organization settings
+        $this->organization->updateSetting($organizationId, 'business_hours_start', $businessHoursStart, 'int');
+        $this->organization->updateSetting($organizationId, 'business_hours_end', $businessHoursEnd, 'int');
+        $this->organization->updateSetting($organizationId, 'send_on_weekends', $sendOnWeekends, 'boolean');
+        $this->organization->updateSetting($organizationId, 'respect_holidays', $respectHolidays, 'boolean');
+        $this->organization->updateSetting($organizationId, 'quiet_hours_start', $quietHoursStart, 'int');
+        $this->organization->updateSetting($organizationId, 'quiet_hours_end', $quietHoursEnd, 'int');
+        
+        // Update segment strategies
+        if (isset($_POST['strategies']) && is_array($_POST['strategies'])) {
+            foreach ($_POST['strategies'] as $segmentId => $strategy) {
+                $primary_channel = $this->errorHandler->validateInput($strategy['primary_channel'] ?? 'email', 'text');
+                $fallback_channel = $this->errorHandler->validateInput($strategy['fallback_channel'] ?? '', 'text');
+                $max_attempts = $this->errorHandler->validateInput($strategy['max_attempts'] ?? 3, 'int', ['min' => 1, 'max' => 10]);
+                $min_hours_between = $this->errorHandler->validateInput($strategy['min_hours_between'] ?? 24, 'int', ['min' => 1, 'max' => 168]);
+                
+                $stmt = $this->db->prepare("
+                    UPDATE segment_strategies 
+                    SET primary_channel = ?, 
+                        fallback_channel = ?, 
+                        max_attempts = ?, 
+                        min_hours_between = ? 
+                    WHERE id = ?
+                ");
+                
+                $stmt->bind_param("ssiii", $primary_channel, $fallback_channel, $max_attempts, $min_hours_between, $segmentId);
+                $stmt->execute();
+            }
+        }
+        
+        // Log audit event
+        $this->organization->logAudit(
+            $organizationId, 
+            $user['id'], 
+            'update_settings',
+            'organization',
+            $organizationId,
+            ['settings' => 'communication']
+        );
+        
+        $_SESSION['message'] = "Communication settings updated successfully.";
+        header('Location: index.php?route=settings/communication');
         exit;
     }
-    
-    // Get current user and organization
-    $user = $this->auth->getCurrentUser();
-    $organizationId = $user['organization_id'];
-    
-    if (!$organizationId) {
-        $_SESSION['error'] = "You are not part of an organization.";
-        header('Location: index.php?route=dashboard');
-        exit;
-    }
-    
-    // Check if user has permission
-    if ($user['organization_role'] !== 'owner' && $user['organization_role'] !== 'admin') {
-        $_SESSION['error'] = "You don't have permission to access billing settings.";
-        header('Location: index.php?route=dashboard');
-        exit;
-    }
-    
-    // Include subscription service
-    require_once BASE_PATH . '/app/services/SubscriptionService.php';
-    $subscriptionService = new SubscriptionService();
-    
-    // Get subscription data
-    $subscription = $subscriptionService->getSubscription($organizationId);
-    $plans = $subscriptionService->getPlans();
-    $billingHistory = $subscriptionService->getBillingHistory($organizationId);
-    $usageReport = $subscriptionService->getUsageReport($organizationId);
-    
-    // Get organization users for usage display
-    $users = $this->organization->getUsers($organizationId);
-    
-    // Load billing settings view
-    include BASE_PATH . '/app/views/settings/billing.php';
-}
+
 }

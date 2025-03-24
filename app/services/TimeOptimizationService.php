@@ -9,6 +9,101 @@ class TimeOptimizationService {
         $this->db = getDbConnection();
         $this->loadHolidays();
     }
+    /**
+     * Get customer's timezone from database or detect it based on location
+     */
+    public function getCustomerTimezone($customerId) {
+        // Get customer details
+        $customer = $this->getCustomerDetails($customerId);
+        
+        // If customer has timezone set, use it
+        if (!empty($customer['timezone'])) {
+            return $customer['timezone'];
+        }
+        
+        // Otherwise, try to detect based on customer's country
+        $country = $customer['country'] ?? 'US';
+        
+        // Default timezone map for major countries
+        $countryTimezones = [
+            'US' => 'America/New_York',
+            'CA' => 'America/Toronto',
+            'GB' => 'Europe/London',
+            'AU' => 'Australia/Sydney',
+            'DE' => 'Europe/Berlin',
+            'FR' => 'Europe/Paris',
+            'JP' => 'Asia/Tokyo',
+            'CN' => 'Asia/Shanghai',
+            'IN' => 'Asia/Kolkata',
+            'BR' => 'America/Sao_Paulo',
+            'RU' => 'Europe/Moscow',
+            'ZA' => 'Africa/Johannesburg',
+            'MX' => 'America/Mexico_City'
+        ];
+        
+        $timezone = $countryTimezones[$country] ?? 'UTC';
+        
+        // Save detected timezone to customer record for future use
+        $this->updateCustomerTimezone($customerId, $timezone);
+        
+        return $timezone;
+    }
+    
+    /**
+     * Update customer's timezone
+     */
+    private function updateCustomerTimezone($customerId, $timezone) {
+        $stmt = $this->db->prepare("UPDATE customers SET timezone = ? WHERE id = ?");
+        $stmt->bind_param("si", $timezone, $customerId);
+        $stmt->execute();
+    }
+    
+    /**
+     * Load more holidays from external API or database
+     * Can be expanded to include more countries and holidays
+     */
+    public function updateHolidayDatabase() {
+        // For demonstration, adding some US and UK holidays for 2023
+        $holidays = [
+            // US Holidays
+            ['US', '2025-01-01', 'New Year\'s Day'],
+            ['US', '2025-01-20', 'Martin Luther King Jr. Day'],
+            ['US', '2025-02-17', 'Presidents Day'],
+            ['US', '2025-05-26', 'Memorial Day'],
+            ['US', '2025-07-04', 'Independence Day'],
+            ['US', '2025-09-01', 'Labor Day'],
+            ['US', '2025-10-13', 'Columbus Day'],
+            ['US', '2025-11-11', 'Veterans Day'],
+            ['US', '2025-11-27', 'Thanksgiving'],
+            ['US', '2025-12-25', 'Christmas Day'],
+            
+            // UK Holidays
+            ['GB', '2025-01-01', 'New Year\'s Day'],
+            ['GB', '2025-04-18', 'Good Friday'],
+            ['GB', '2025-04-21', 'Easter Monday'],
+            ['GB', '2025-05-05', 'Early May Bank Holiday'],
+            ['GB', '2025-05-26', 'Spring Bank Holiday'],
+            ['GB', '2025-08-25', 'Summer Bank Holiday'],
+            ['GB', '2025-12-25', 'Christmas Day'],
+            ['GB', '2025-12-26', 'Boxing Day']
+        ];
+        
+        // Clear existing holidays for these dates (to avoid duplicates)
+        $this->db->query("DELETE FROM holidays WHERE holiday_date >= '2025-01-01' AND holiday_date <= '2025-12-31'");
+        
+        // Add new holidays
+        $stmt = $this->db->prepare("INSERT INTO holidays (country, holiday_date, name) VALUES (?, ?, ?)");
+        
+        foreach ($holidays as $holiday) {
+            $stmt->bind_param("sss", $holiday[0], $holiday[1], $holiday[2]);
+            $stmt->execute();
+        }
+        
+        // Refresh the holiday cache
+        $this->loadHolidays();
+        
+        return count($holidays);
+    }
     
     /**
      * Determine the optimal send time based on customer timezone and preferences

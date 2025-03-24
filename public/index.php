@@ -198,5 +198,47 @@ case 'settings/billing':
         $controller = new TokenController();
         $controller->revokeToken();
         break;
+
+        
+        // Add to public/index.php in the switch statement
+        
+        // Communication settings route
+        case 'settings/communication':
+            require_once BASE_PATH . '/app/controllers/SettingsController.php';
+            $controller = new SettingsController();
+            $controller->communicationSettings();
+            break;
+        
+        // Update communication settings
+        case 'settings/update-communication':
+            require_once BASE_PATH . '/app/controllers/SettingsController.php';
+            $controller = new SettingsController();
+            $controller->updateCommunicationSettings();
+            break;
+        
+        // Update holidays database
+        case 'settings/update-holidays':
+            require_once BASE_PATH . '/app/services/TimeOptimizationService.php';
+            $service = new TimeOptimizationService();
+            $count = $service->updateHolidayDatabase();
+            $_SESSION['message'] = "Updated holiday database with {$count} holidays.";
+            header('Location: index.php?route=settings/communication');
+            exit;
+            break;
+        
+        // Run customer segmentation
+        case 'run-segmentation':
+            require_once BASE_PATH . '/app/services/SegmentationEngine.php';
+            $segmentationEngine = new SegmentationEngine();
+            $result = $segmentationEngine->performBulkSegmentation();
+            $_SESSION['message'] = "Analyzed and segmented {$result['updated']} of {$result['total']} customers.";
+            header('Location: index.php?route=dashboard');
+            exit;
+            break;
+    case 'schedule-smart-reminder':
+        require_once BASE_PATH . '/app/controllers/ReminderController.php';
+        $controller = new ReminderController();
+        $controller->scheduleSmartReminder();
+        break;
 }
 ?>
