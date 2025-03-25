@@ -117,34 +117,40 @@ class TimeOptimizationService {
         $customer = $this->getCustomerDetails($customerId);
         $timezone = $customer['timezone'] ?: 'UTC';
         
-        // Create datetime in customer's timezone
-        $now = new DateTime('now', new DateTimeZone($timezone));
-        $hour = (int)$now->format('H');
-        $dayOfWeek = (int)$now->format('N'); // 1 (Monday) to 7 (Sunday)
-        $dateStr = $now->format('Y-m-d');
-        
-        // Check if today is a holiday in customer's country
-        $isHoliday = $this->isHoliday($dateStr, $customer['country']);
-        
-        // Define business hours based on segment/type
-        $businessHours = $this->getBusinessHours($transactionType);
-        
-        // Check if current time is within business hours
-        $isBusinessHours = $this->isWithinBusinessHours($hour, $dayOfWeek, $businessHours, $isHoliday);
-        
-        // Get quiet hours based on country/region
-        $quietHours = $this->getQuietHours($customer['country']);
-        
-        // Check if current time is within quiet hours
-        $isQuietHours = $this->isWithinQuietHours($hour, $quietHours);
-        
-        // If outside business hours or in quiet hours, schedule for next business hour
-        if (!$isBusinessHours || $isQuietHours) {
-            return $this->getNextBusinessHour($now, $businessHours, $quietHours, $isHoliday);
+        try {
+            // Create datetime in customer's timezone
+            $now = new DateTime('now', new DateTimeZone($timezone));
+            $hour = (int)$now->format('H');
+            $dayOfWeek = (int)$now->format('N'); // 1 (Monday) to 7 (Sunday)
+            $dateStr = $now->format('Y-m-d');
+            
+            // Check if today is a holiday in customer's country
+            $isHoliday = $this->isHoliday($dateStr, $customer['country'] ?? 'US');
+            
+            // Define business hours based on segment/type
+            $businessHours = $this->getBusinessHours($transactionType);
+            
+            // Check if current time is within business hours
+            $isBusinessHours = $this->isWithinBusinessHours($hour, $dayOfWeek, $businessHours, $isHoliday);
+            
+            // Get quiet hours based on country/region
+            $quietHours = $this->getQuietHours($customer['country'] ?? 'US');
+            
+            // Check if current time is within quiet hours
+            $isQuietHours = $this->isWithinQuietHours($hour, $quietHours);
+            
+            // If outside business hours or in quiet hours, schedule for next business hour
+            if (!$isBusinessHours || $isQuietHours) {
+                return $this->getNextBusinessHour($now, $businessHours, $quietHours, $isHoliday);
+            }
+            
+            // Current time is acceptable
+            return $now;
+        } catch (Exception $e) {
+            // In case of any timezone errors, default to current time
+            error_log("Error in getOptimalSendTime: " . $e->getMessage());
+            return new DateTime();
         }
-        
-        // Current time is acceptable
-        return $now;
     }
     
     /**

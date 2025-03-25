@@ -89,12 +89,19 @@ class Auth {
     }
     
     public function login($email, $password) {
+        // Check if account is locked
+        if ($this->isAccountLocked($email)) {
+            $_SESSION['error'] = "Account is temporarily locked due to too many failed login attempts. Please try again later.";
+            return false;
+        }
+        
         $stmt = $this->db->prepare("SELECT * FROM users WHERE email = ?");
         $stmt->bind_param("s", $email);
         $stmt->execute();
         $result = $stmt->get_result();
         
         if ($result->num_rows === 0) {
+            $this->recordFailedLogin($email);
             return false;
         }
         
@@ -102,10 +109,17 @@ class Auth {
         
         // Verify password
         if (password_verify($password, $user['password'])) {
+            // Reset failed login attempts
+            $this->resetFailedLogins($email);
+            
             // Set session variables
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['name'];
             $_SESSION['user_role'] = $user['role'];
+            $_SESSION['organization_id'] = $user['organization_id'];
+            $_SESSION['user_email'] = $user['email'];
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+            $_SESSION['last_activity'] = time();
             
             // Update last login time
             $stmt = $this->db->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
@@ -115,7 +129,43 @@ class Auth {
             return true;
         }
         
+        $this->recordFailedLogin($email);
         return false;
+    }
+    
+    private function isAccountLocked($email) {
+        $stmt = $this->db->prepare("SELECT * FROM login_attempts WHERE email = ? AND success = 0 ORDER BY attempt_time DESC LIMIT 5");
+        $stmt->bind_param('s', $email);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($result->num_rows < 5) {
+            return false;
+        }
+        
+        // Get the oldest of the last 5 failed attempts
+        $attempts = [];
+        while ($row = $result->fetch_assoc()) {
+            $attempts[] = $row;
+        }
+        
+        $oldestAttempt = end($attempts);
+        $lockoutTime = strtotime($oldestAttempt['attempt_time']) + 900; // 15 minutes
+        
+        return time() < $lockoutTime;
+    }
+    
+    private function recordFailedLogin($email) {
+        $stmt = $this->db->prepare("INSERT INTO login_attempts (email, ip_address, success, attempt_time) VALUES (?, ?, 0, NOW())");
+        $ipAddress = $_SERVER['REMOTE_ADDR'] ?? '0.0.0.0';
+        $stmt->bind_param('ss', $email, $ipAddress);
+        $stmt->execute();
+    }
+    
+    private function resetFailedLogins($email) {
+        $stmt = $this->db->prepare("DELETE FROM login_attempts WHERE email = ? AND success = 0");
+        $stmt->bind_param('s', $email);
+        $stmt->execute();
     }
     
     public function logout() {

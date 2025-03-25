@@ -9,8 +9,10 @@ class SettingsController {
     private $auth;
     private $organization;
     private $errorHandler;
+    private $db; // Add property declaration to fix deprecated warning
     
     public function __construct() {
+        $this->db = getDbConnection(); // Initialize db connection
         $this->auth = new Auth();
         $this->organization = new Organization();
         $this->errorHandler = ErrorHandler::getInstance();
@@ -666,7 +668,20 @@ class SettingsController {
         $tokens = [];
         
         while ($row = $result->fetch_assoc()) {
-            $row['scopes'] = json_decode($row['scopes'], true);
+            // Make sure scopes is decoded from JSON to array
+            if (isset($row['scopes'])) {
+                // If scopes is a string, decode it
+                if (is_string($row['scopes'])) {
+                    $row['scopes'] = json_decode($row['scopes'], true) ?? [];
+                }
+                // If it's not an array after decoding, make it an empty array
+                if (!is_array($row['scopes'])) {
+                    $row['scopes'] = [];
+                }
+            } else {
+                $row['scopes'] = [];
+            }
+            
             $tokens[] = $row;
         }
         
@@ -957,5 +972,38 @@ class SettingsController {
         header('Location: index.php?route=settings/communication');
         exit;
     }
+
+    /**
+ * Change subscription plan
+ * 
+ * @param string $plan New plan
+ * @return bool Success status
+ */
+public function changePlan($plan) {
+    // Check if user is authenticated
+    if (!$this->auth->isAuthenticated()) {
+        return false;
+    }
+    
+    // Get current user and organization
+    $user = $this->auth->getCurrentUser();
+    $organizationId = $user['organization_id'];
+    
+    if (!$organizationId) {
+        return false;
+    }
+    
+    // Check if user has permission
+    if ($user['organization_role'] !== 'owner' && $user['organization_role'] !== 'admin') {
+        return false;
+    }
+    
+    // Include subscription service
+    require_once BASE_PATH . '/app/services/SubscriptionService.php';
+    $subscriptionService = new SubscriptionService();
+    
+    // Change plan
+    return $subscriptionService->changePlan($organizationId, $plan);
+}
 
 }

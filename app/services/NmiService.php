@@ -11,59 +11,86 @@ class NmiService {
     /**
      * Fetch failed transactions from NMI
      */
-    public function getFailedTransactions($startDate = null, $endDate = null) {
-        // Prepare API request without date constraints
+    
+     public function getFailedTransactions($startDate = null, $endDate = null) {
+        // Prepare API request with date constraints if provided
         $postData = [
             'security_key' => $this->apiKey,
-            'report_type' => 'transaction',
-            'condition' => 'status=failed'
+            'report_type' => 'transaction'
         ];
+        
+        // Add date range if provided
+        if ($startDate && $endDate) {
+            $postData['start_date'] = date('Ymd', strtotime($startDate));
+            $postData['end_date'] = date('Ymd', strtotime($endDate));
+        }
+        
+        // Add condition for failed transactions
+        $postData['condition'] = 'status=failed';
         
         // Make API request using cURL
         $ch = curl_init($this->apiUrl);
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For development only
         
         $response = curl_exec($ch);
         
         if (curl_errno($ch)) {
-            return ['error' => curl_error($ch)];
+            curl_close($ch);
+            return ['error' => curl_error($ch), 'transactions' => []];
         }
         
         curl_close($ch);
         
-        // Parse and filter for failed transactions only
+        // Parse XML response
         $result = $this->parseXmlResponse($response);
         
-        // If we get no results with condition, try without it
+        // If we get no results, try without the 'condition' param
         if (empty($result['transactions'])) {
             $postData = [
                 'security_key' => $this->apiKey,
                 'report_type' => 'transaction'
             ];
             
+            if ($startDate && $endDate) {
+                $postData['start_date'] = date('Ymd', strtotime($startDate));
+                $postData['end_date'] = date('Ymd', strtotime($endDate));
+            }
+            
             $ch = curl_init($this->apiUrl);
             curl_setopt($ch, CURLOPT_POST, 1);
             curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
             curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For development only
             
             $response = curl_exec($ch);
             
             if (curl_errno($ch)) {
-                return ['error' => curl_error($ch)];
+                curl_close($ch);
+                return ['error' => curl_error($ch), 'transactions' => []];
             }
             
             curl_close($ch);
             
-            // Parse and filter for failed transactions only
+            // Parse and filter for failed transactions manually
             $result = $this->parseXmlResponse($response);
+        }
+        
+        // If still empty, return empty array instead of null
+        if (!isset($result['transactions'])) {
+            $result['transactions'] = [];
         }
         
         return $result;
     }
     
     private function parseXmlResponse($xmlResponse) {
+        if (empty($xmlResponse)) {
+            return ['transactions' => []];
+        }
+        
         $transactions = [];
         
         // Create SimpleXML object from response
@@ -73,28 +100,51 @@ class NmiService {
             // Check if we have transaction data
             if (isset($xml->transaction)) {
                 foreach ($xml->transaction as $transaction) {
-                    // Get the amount from the action node
-                    $amount = 0;
-                    if (isset($transaction->action) && isset($transaction->action->amount)) {
-                        $amount = (float)$transaction->action->amount;
-                    }
+                    // Get the status/condition
+                    $status = isset($transaction->condition) ? (string)$transaction->condition : '';
                     
-                    // Get all fields from the transaction
-                    $transData = [
-                        'transaction_id' => isset($transaction->transaction_id) ? (string)$transaction->transaction_id : '',
-                        'amount' => $amount, // Use the amount from the action node
-                        'email' => isset($transaction->email) ? (string)$transaction->email : '',
-                        'phone' => isset($transaction->phone) ? (string)$transaction->phone : '',
-                        'date' => isset($transaction->action->date) ? (string)$transaction->action->date : '',
-                        'status' => isset($transaction->condition) ? (string)$transaction->condition : 'failed',
-                        'reason' => isset($transaction->action->response_text) ? (string)$transaction->action->response_text : 'failed',
-                        'first_name' => isset($transaction->first_name) ? (string)$transaction->first_name : '',
-                        'last_name' => isset($transaction->last_name) ? (string)$transaction->last_name : '',
-                        'customer' => isset($transaction->customerid) ? (string)$transaction->customerid : ''
-                    ];
-                    
-                    // Only add failed transactions to our result
-                    if (strtolower($transData['status']) == 'failed') {
+                    // Only process failed transactions
+                    if (strtolower($status) == 'failed') {
+                        // Get the amount from the action node
+                        $amount = 0;
+                        if (isset($transaction->action) && isset($transaction->action->amount)) {
+                            $amount = (float)$transaction->action->amount;
+                        }
+                        
+                        // Get email and phone (if available)
+                        $email = isset($transaction->email) ? (string)$transaction->email : '';
+                        $phone = isset($transaction->phone) ? (string)$transaction->phone : '';
+                        
+                        // Get the response text (failure reason)
+                        $reason = '';
+                        if (isset($transaction->action) && isset($transaction->action->response_text)) {
+                            $reason = (string)$transaction->action->response_text;
+                        }
+                        
+                        // Get transaction date
+                        $date = isset($transaction->action->date) ? (string)$transaction->action->date : '';
+                        if ($date) {
+                            // Convert YYYYMMDDHHMMSS format to Y-m-d H:i:s
+                            $date = DateTime::createFromFormat('YmdHis', $date);
+                            $date = $date ? $date->format('Y-m-d H:i:s') : date('Y-m-d H:i:s');
+                        } else {
+                            $date = date('Y-m-d H:i:s');
+                        }
+                        
+                        // Get all fields from the transaction
+                        $transData = [
+                            'transaction_id' => isset($transaction->transaction_id) ? (string)$transaction->transaction_id : '',
+                            'amount' => $amount,
+                            'email' => $email,
+                            'phone' => $phone,
+                            'date' => $date,
+                            'status' => 'failed',
+                            'reason' => $reason ?: 'Unknown',
+                            'first_name' => isset($transaction->first_name) ? (string)$transaction->first_name : '',
+                            'last_name' => isset($transaction->last_name) ? (string)$transaction->last_name : '',
+                            'customer' => isset($transaction->customerid) ? (string)$transaction->customerid : ''
+                        ];
+                        
                         $transactions[] = $transData;
                     }
                 }
@@ -103,9 +153,52 @@ class NmiService {
             return ['transactions' => $transactions];
         } catch (Exception $e) {
             error_log("XML Parsing Error: " . $e->getMessage());
-            return ['error' => 'Failed to parse XML response: ' . $e->getMessage()];
+            return ['error' => 'Failed to parse XML response: ' . $e->getMessage(), 'transactions' => []];
         }
     }
+    // private function parseXmlResponse($xmlResponse) {
+    //     $transactions = [];
+        
+    //     // Create SimpleXML object from response
+    //     try {
+    //         $xml = new SimpleXMLElement($xmlResponse);
+            
+    //         // Check if we have transaction data
+    //         if (isset($xml->transaction)) {
+    //             foreach ($xml->transaction as $transaction) {
+    //                 // Get the amount from the action node
+    //                 $amount = 0;
+    //                 if (isset($transaction->action) && isset($transaction->action->amount)) {
+    //                     $amount = (float)$transaction->action->amount;
+    //                 }
+                    
+    //                 // Get all fields from the transaction
+    //                 $transData = [
+    //                     'transaction_id' => isset($transaction->transaction_id) ? (string)$transaction->transaction_id : '',
+    //                     'amount' => $amount, // Use the amount from the action node
+    //                     'email' => isset($transaction->email) ? (string)$transaction->email : '',
+    //                     'phone' => isset($transaction->phone) ? (string)$transaction->phone : '',
+    //                     'date' => isset($transaction->action->date) ? (string)$transaction->action->date : '',
+    //                     'status' => isset($transaction->condition) ? (string)$transaction->condition : 'failed',
+    //                     'reason' => isset($transaction->action->response_text) ? (string)$transaction->action->response_text : 'failed',
+    //                     'first_name' => isset($transaction->first_name) ? (string)$transaction->first_name : '',
+    //                     'last_name' => isset($transaction->last_name) ? (string)$transaction->last_name : '',
+    //                     'customer' => isset($transaction->customerid) ? (string)$transaction->customerid : ''
+    //                 ];
+                    
+    //                 // Only add failed transactions to our result
+    //                 if (strtolower($transData['status']) == 'failed') {
+    //                     $transactions[] = $transData;
+    //                 }
+    //             }
+    //         }
+            
+    //         return ['transactions' => $transactions];
+    //     } catch (Exception $e) {
+    //         error_log("XML Parsing Error: " . $e->getMessage());
+    //         return ['error' => 'Failed to parse XML response: ' . $e->getMessage()];
+    //     }
+    // }
 
     public function getTransactionById($transactionId) {
         $postData = [

@@ -137,7 +137,7 @@ class TransactionController {
  * Get recovery link for a transaction
  */
     public function getRecoveryLink($transactionId) {
-        $stmt = $this->db->prepare("SELECT * FROM payment_recovery WHERE transaction_id = ?");
+        $stmt = $this->db->prepare("SELECT * FROM payment_recovery WHERE transaction_id = ? AND status = 'active'");
         $stmt->bind_param("i", $transactionId);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -148,7 +148,7 @@ class TransactionController {
         
         return null;
     }
-
+    
     /**
      * Get communication history for a transaction
      */
@@ -216,5 +216,8 @@ class TransactionController {
         
         echo "<p>Check the server root directory for the full XML and structure breakdown files.</p>";
     }
+
+
+    
 }
 ?>

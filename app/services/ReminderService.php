@@ -254,38 +254,33 @@ class ReminderService {
     /**
      * Get email template
      */
+    /**
+ * Get email template
+ */
     private function getEmailTemplate($templateName) {
-        // In a real implementation, these would be in the database or template files
-        $templates = [
-            'reminder_1' => [
-                'subject' => 'Your payment of ${{AMOUNT}} was declined',
-                'body' => '<p>We noticed your recent payment was declined. Please click <a href="{{PAYMENT_LINK}}">here</a> to complete your payment.</p>'
-            ],
-            'reminder_2' => [
-                'subject' => 'Second Reminder: Your payment of ${{AMOUNT}} is still pending',
-                'body' => '<p>This is a friendly reminder that your payment is still pending. Please click <a href="{{PAYMENT_LINK}}">here</a> to complete your payment.</p>'
-            ],
-            'reminder_3' => [
-                'subject' => 'Final Reminder: Your payment of ${{AMOUNT}}',
-                'body' => '<p>This is your final reminder to complete your payment. Please click <a href="{{PAYMENT_LINK}}">here</a> to proceed.</p>'
-            ]
-        ];
+        // Load templates from file
+        $templates = include BASE_PATH . '/app/templates/email_templates.php';
         
+        // Return template if it exists, or use the default
         return $templates[$templateName] ?? $templates['reminder_1'];
     }
-    
+
     /**
      * Get SMS template
      */
     private function getSmsTemplate($templateName) {
-        // In a real implementation, these would be in the database
-        $templates = [
-            'reminder_1' => 'Your payment of ${{AMOUNT}} was declined. Complete your payment here: {{PAYMENT_LINK}}',
-            'reminder_2' => 'Reminder: Your payment of ${{AMOUNT}} is still pending. Pay here: {{PAYMENT_LINK}}',
-            'reminder_3' => 'Final notice: Please complete your payment of ${{AMOUNT}} here: {{PAYMENT_LINK}}'
-        ];
+        // Load templates from file
+        $templates = include BASE_PATH . '/app/templates/email_templates.php';
         
-        return $templates[$templateName] ?? $templates['reminder_1'];
+        // Check for SMS-specific template first
+        if (strpos($templateName, '_sms') === false) {
+            $smsTemplateName = $templateName . '_sms';
+        } else {
+            $smsTemplateName = $templateName;
+        }
+        
+        // Return template if it exists, or use the default
+        return $templates[$smsTemplateName] ?? $templates['reminder_1_sms'];
     }
     
     /**
@@ -410,16 +405,27 @@ class ReminderService {
             $template['subject']
         );
         
-        // Log detailed email information for testing
-        error_log("=== TEST EMAIL ===");
+        // Add pixel for open tracking
+        $trackingPixel = '<img src="' . BASE_URL . '/index.php?route=track-open&id=' . $reminder['tracking_id'] . '" width="1" height="1" alt="" style="display:none;">';
+        $body .= $trackingPixel;
+        
+        // In a real implementation, send actual email
+        // For now just log it
+        error_log("=== SENDING EMAIL ===");
         error_log("TO: {$reminder['email']}");
         error_log("SUBJECT: {$subject}");
         error_log("BODY: " . $body);
-        error_log("TRACKING ID: {$reminder['tracking_id']}");
-        error_log("RECOVERY LINK: {$reminder['recovery_link']}&track={$reminder['tracking_id']}");
-        error_log("==================");
         
-        // Return success - don't update the status here, let the calling function do it
+        // Add actual email sending code (PHP mailer or API)
+        $to = $reminder['email'];
+        $headers = "MIME-Version: 1.0" . "\r\n";
+        $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
+        $headers .= "From: no-reply@paymentrecovery.com" . "\r\n";
+        
+        // Use mail() function for simple testing
+        // In production, use a proper email sending service
+        @mail($to, $subject, $body, $headers);
+        
         return true;
     }
 

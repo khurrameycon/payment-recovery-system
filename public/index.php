@@ -240,5 +240,32 @@ case 'settings/billing':
         $controller = new ReminderController();
         $controller->scheduleSmartReminder();
         break;
+
+        case 'settings/change-plan':
+            require_once BASE_PATH . '/app/controllers/SettingsController.php';
+            $controller = new SettingsController();
+            
+            // Get plan from request
+            $plan = $_GET['plan'] ?? 'standard';
+            
+            // Check if plan is valid
+            $validPlans = ['standard', 'premium', 'enterprise'];
+            if (!in_array($plan, $validPlans)) {
+                $_SESSION['error'] = "Invalid plan selected.";
+                header('Location: index.php?route=settings/billing');
+                exit;
+            }
+            
+            // Change plan
+            if ($controller->changePlan($plan)) {
+                $_SESSION['message'] = "Your plan has been updated to " . ucfirst($plan) . ".";
+            } else {
+                $_SESSION['error'] = "Failed to update plan. Please try again.";
+            }
+            
+            // Redirect to billing page
+            header('Location: index.php?route=settings/billing');
+            exit;
+            break;
 }
 ?>

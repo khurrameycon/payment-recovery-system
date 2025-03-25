@@ -108,5 +108,44 @@ class ReminderController {
         $stmt->bind_param("ss", $status, $trackingId);
         $stmt->execute();
     }
+
+
+    // Add to app/controllers/ReminderController.php
+public function scheduleSmartReminder() {
+    // Get transaction ID from request
+    $transactionId = $_GET['id'] ?? 0;
+    
+    if (!$transactionId) {
+        $_SESSION['error'] = "No transaction specified";
+        header('Location: index.php?route=failed-transactions');
+        exit;
+    }
+    
+    // Get channel from request (default to smart)
+    $channel = $_GET['channel'] ?? 'smart';
+    
+    // Create options array
+    $options = [
+        'channel' => $channel,
+        'send_now' => isset($_GET['send_now']) && $_GET['send_now'] == 1
+    ];
+    
+    // Schedule the reminder
+    $result = $this->reminderService->scheduleSmartReminder($transactionId, $options);
+    
+    if ($result['success']) {
+        $_SESSION['message'] = $result['message'];
+    } else {
+        $_SESSION['error'] = $result['message'];
+    }
+    
+    // Redirect back to transaction details or list
+    if (isset($_GET['return']) && $_GET['return'] == 'details') {
+        header('Location: index.php?route=view-transaction&id=' . $transactionId);
+    } else {
+        header('Location: index.php?route=failed-transactions');
+    }
+    exit;
+}
 }
 ?>
