@@ -12,79 +12,106 @@ class NmiService {
      * Fetch failed transactions from NMI
      */
     
-     public function getFailedTransactions($startDate = null, $endDate = null) {
-        // Prepare API request with date constraints if provided
+     // File: app/services/NmiService.php
+// Update the getFailedTransactions method to improve error handling and logging
+
+public function getFailedTransactions($startDate = null, $endDate = null) {
+    // Log the API request
+    error_log("NMI API Request: Fetching failed transactions");
+    if ($startDate && $endDate) {
+        error_log("Date range: $startDate to $endDate");
+    }
+    
+    // Prepare API request with date constraints if provided
+    $postData = [
+        'security_key' => $this->apiKey,
+        'report_type' => 'transaction'
+    ];
+    
+    // Add date range if provided
+    if ($startDate && $endDate) {
+        $postData['start_date'] = date('Ymd', strtotime($startDate));
+        $postData['end_date'] = date('Ymd', strtotime($endDate));
+    }
+    
+    // Add condition for failed transactions
+    $postData['condition'] = 'status=failed';
+    
+    // Make API request using cURL
+    $ch = curl_init($this->apiUrl);
+    curl_setopt($ch, CURLOPT_POST, 1);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For development only
+    
+    // Log the raw request
+    error_log("NMI API Request Data: " . http_build_query($postData));
+    
+    $response = curl_exec($ch);
+    
+    if (curl_errno($ch)) {
+        $errorMsg = curl_error($ch);
+        error_log("NMI API Error: " . $errorMsg);
+        curl_close($ch);
+        return ['error' => $errorMsg, 'transactions' => []];
+    }
+    
+    curl_close($ch);
+    
+    // Log a sample of the response (first 200 chars)
+    error_log("NMI API Response (first 200 chars): " . substr($response, 0, 200));
+    
+    // Parse XML response
+    $result = $this->parseXmlResponse($response);
+    
+    // If we get no results, try without the 'condition' param
+    if (empty($result['transactions'])) {
+        error_log("No failed transactions found with condition param, trying without condition");
         $postData = [
             'security_key' => $this->apiKey,
             'report_type' => 'transaction'
         ];
         
-        // Add date range if provided
         if ($startDate && $endDate) {
             $postData['start_date'] = date('Ymd', strtotime($startDate));
             $postData['end_date'] = date('Ymd', strtotime($endDate));
         }
         
-        // Add condition for failed transactions
-        $postData['condition'] = 'status=failed';
-        
-        // Make API request using cURL
         $ch = curl_init($this->apiUrl);
         curl_setopt($ch, CURLOPT_POST, 1);
         curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For development only
         
+        error_log("Second attempt NMI API Request Data: " . http_build_query($postData));
+        
         $response = curl_exec($ch);
         
         if (curl_errno($ch)) {
+            $errorMsg = curl_error($ch);
+            error_log("NMI API Error on second attempt: " . $errorMsg);
             curl_close($ch);
-            return ['error' => curl_error($ch), 'transactions' => []];
+            return ['error' => $errorMsg, 'transactions' => []];
         }
         
         curl_close($ch);
         
-        // Parse XML response
+        // Log a sample of the response (first 200 chars)
+        error_log("NMI API Second Response (first 200 chars): " . substr($response, 0, 200));
+        
+        // Parse and filter for failed transactions manually
         $result = $this->parseXmlResponse($response);
-        
-        // If we get no results, try without the 'condition' param
-        if (empty($result['transactions'])) {
-            $postData = [
-                'security_key' => $this->apiKey,
-                'report_type' => 'transaction'
-            ];
-            
-            if ($startDate && $endDate) {
-                $postData['start_date'] = date('Ymd', strtotime($startDate));
-                $postData['end_date'] = date('Ymd', strtotime($endDate));
-            }
-            
-            $ch = curl_init($this->apiUrl);
-            curl_setopt($ch, CURLOPT_POST, 1);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postData));
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false); // For development only
-            
-            $response = curl_exec($ch);
-            
-            if (curl_errno($ch)) {
-                curl_close($ch);
-                return ['error' => curl_error($ch), 'transactions' => []];
-            }
-            
-            curl_close($ch);
-            
-            // Parse and filter for failed transactions manually
-            $result = $this->parseXmlResponse($response);
-        }
-        
-        // If still empty, return empty array instead of null
-        if (!isset($result['transactions'])) {
-            $result['transactions'] = [];
-        }
-        
-        return $result;
     }
+    
+    // If still empty, return empty array instead of null
+    if (!isset($result['transactions'])) {
+        $result['transactions'] = [];
+    }
+    
+    error_log("Found " . count($result['transactions']) . " failed transactions");
+    
+    return $result;
+}
     
     private function parseXmlResponse($xmlResponse) {
         if (empty($xmlResponse)) {

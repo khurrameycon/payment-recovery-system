@@ -225,13 +225,11 @@ class ReminderService {
         return $sent;
     }
     
+    
     /**
      * Send SMS reminder
      */
     private function sendSmsReminder($reminder) {
-        // In a real implementation, this would use Twilio
-        // For now, we'll just simulate sending
-        
         // Get SMS template
         $template = $this->getSmsTemplate($reminder['message_template']);
         
@@ -243,12 +241,20 @@ class ReminderService {
             $template
         );
         
-        // Log SMS for development
-        error_log("SMS TO: {$reminder['phone']}, MESSAGE: {$message}");
+        // Use CommunicationService to send SMS
+        require_once BASE_PATH . '/app/services/CommunicationService.php';
+        $communicationService = new CommunicationService(true); // true = test mode
         
-        // In production, you would send the actual SMS here
+        $result = $communicationService->sendSMS($reminder['phone'], $message);
         
-        return true;
+        // Log result
+        if ($result) {
+            error_log("SMS reminder successfully sent to {$reminder['phone']}");
+        } else {
+            error_log("Failed to send SMS reminder to {$reminder['phone']}");
+        }
+        
+        return $result;
     }
     
     /**
@@ -387,6 +393,9 @@ class ReminderService {
         return 'email';
     }
 
+    /**
+ * Send email reminder
+ */
     private function sendEmailReminder($reminder) {
         // Get email template
         $template = $this->getEmailTemplate($reminder['message_template']);
@@ -405,28 +414,24 @@ class ReminderService {
             $template['subject']
         );
         
-        // Add pixel for open tracking
+        // Add tracking pixel for open tracking
         $trackingPixel = '<img src="' . BASE_URL . '/index.php?route=track-open&id=' . $reminder['tracking_id'] . '" width="1" height="1" alt="" style="display:none;">';
         $body .= $trackingPixel;
         
-        // In a real implementation, send actual email
-        // For now just log it
-        error_log("=== SENDING EMAIL ===");
-        error_log("TO: {$reminder['email']}");
-        error_log("SUBJECT: {$subject}");
-        error_log("BODY: " . $body);
+        // Use CommunicationService to send email
+        require_once BASE_PATH . '/app/services/CommunicationService.php';
+        $communicationService = new CommunicationService(true); // true = test mode
         
-        // Add actual email sending code (PHP mailer or API)
-        $to = $reminder['email'];
-        $headers = "MIME-Version: 1.0" . "\r\n";
-        $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-        $headers .= "From: no-reply@paymentrecovery.com" . "\r\n";
+        $result = $communicationService->sendEmail($reminder['email'], $subject, $body);
         
-        // Use mail() function for simple testing
-        // In production, use a proper email sending service
-        @mail($to, $subject, $body, $headers);
+        // Log result
+        if ($result) {
+            error_log("Email reminder successfully sent to {$reminder['email']}");
+        } else {
+            error_log("Failed to send email reminder to {$reminder['email']}");
+        }
         
-        return true;
+        return $result;
     }
 
     
